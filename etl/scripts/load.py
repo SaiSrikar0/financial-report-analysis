@@ -26,16 +26,20 @@ def create_tables_if_not_exists():
         create_standard_table_sql = """
         CREATE TABLE IF NOT EXISTS standard_table (
             id BIGSERIAL PRIMARY KEY,
-            transaction_date DATE,
-            symbol TEXT,
-            open FLOAT,
-            close FLOAT,
-            trading_volume BIGINT,
-            total_revenue FLOAT,
-            profit FLOAT,
-            price_change FLOAT,
-            price_change_pct FLOAT,
+            date TEXT,
+            ticker TEXT,
+            revenue FLOAT,
+            operating_income FLOAT,
+            net_income FLOAT,
+            operating_cashflow FLOAT,
+            total_assets FLOAT,
+            total_liabilities FLOAT,
             profit_margin FLOAT,
+            operating_margin FLOAT,
+            revenue_growth FLOAT,
+            net_income_growth FLOAT,
+            asset_efficiency FLOAT,
+            debt_to_asset FLOAT,
             created_at TIMESTAMP DEFAULT NOW()
         );
         """
@@ -44,10 +48,14 @@ def create_tables_if_not_exists():
         create_category_table_sql = """
         CREATE TABLE IF NOT EXISTS category_table (
             id BIGSERIAL PRIMARY KEY,
-            symbol TEXT,
-            industry_sector TEXT,
-            financial_category TEXT,
-            risk_rating TEXT,
+            ticker TEXT,
+            date TEXT,
+            sector TEXT,
+            category TEXT,
+            risk_level TEXT,
+            revenue FLOAT,
+            operating_income FLOAT,
+            net_income FLOAT,
             created_at TIMESTAMP DEFAULT NOW()
         );
         """
@@ -83,6 +91,11 @@ def load_to_supabase(staged_path: str, table_name: str):
         supabase = get_supabase_client()
 
         df = pd.read_csv(staged_path)
+        
+        # Handle NaN and Inf values
+        df = df.replace([float('inf'), float('-inf')], None)
+        df = df.where(pd.notnull(df), None)
+        
         total_rows = len(df)
         batch_size = 50
 
@@ -113,12 +126,14 @@ def load_to_supabase(staged_path: str, table_name: str):
 # Main Execution
 if __name__ == "__main__":
 
-    # Extract and transform data
-    raw_path = extract_data()
-    standard_path, category_path = transform_data(raw_path)
+    # Transform data (raw data already exists in data/raw/)
+    standard_path, category_path = transform_data()
 
-    # Create tables
-    create_tables_if_not_exists()
+    # Note: Tables must be created in Supabase first using create_tables.sql
+    print("\n=== IMPORTANT ===")
+    print("Before loading data, make sure you have run create_tables.sql in Supabase SQL Editor")
+    print("This creates the standard_table and category_table with correct schema")
+    print("================\n")
     
     # Load Standard Table (for ML/SVR)
     print("\n--- Loading Standard Table (for ML/SVR) ---")

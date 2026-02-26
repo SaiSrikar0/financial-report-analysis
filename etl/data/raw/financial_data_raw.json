@@ -1,0 +1,14 @@
+[
+  {
+    "date": "2026-01-21",
+    "ticker": "AAPL",
+    "open_price": 150.0,
+    "close_price": 155.0
+  },
+  {
+    "date": "2026-01-21",
+    "ticker": "GOOGL",
+    "open_price": 2800.0,
+    "close_price": 2850.0
+  }
+]
