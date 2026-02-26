@@ -1,0 +1,19 @@
+FINCAST - FINANCIAL ANALYSIS REPORT
+============================================================
+Generated: 2026-02-26
+Total Insights Generated: 8
+============================================================
+
+KEY INSIGHTS AND FINDINGS:
+------------------------------------------------------------
+1. Total market (AAPL+MSFT+GOOGL) revenue grew 209.1% from 2006 to 2025
+2. Average profit margin across all companies: 30.55%
+3. Average debt ratio decreased from 0.63 to 0.45
+4. MSFT: Revenue grew 3.1x ($91.2B → $281.7B)
+5. MSFT: Profit margin at 36.15% (from 22.53%)
+6. MSFT: Reduced debt-to-assets by 29.2% (stronger balance sheet)
+7. MSFT: Average revenue growth 11.8% (volatility: 6.1%)
+8. MSFT (FY 2017): Profit margin dropped -11.38% - investigate profitability decline
+
+============================================================
+END OF REPORT
