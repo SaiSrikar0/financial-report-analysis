@@ -1,0 +1,89 @@
+======================================================================
+PHASE 3.2: COMPREHENSIVE FEATURE ANALYSIS REPORT
+======================================================================
+Generated: 2026-02-26 15:27:50
+
+1. FEATURE ANALYSIS
+----------------------------------------------------------------------
+   Total Features Analyzed: 12
+   Top 5 Important Features:
+   - net_income: 0.1550 importance
+   - net_income_growth: 0.1012 importance
+   - total_assets: 0.0985 importance
+   - id: 0.0918 importance
+   - operating_margin: 0.0899 importance
+
+   High Correlation Pairs (>0.7):
+   - id ↔ revenue: 0.984
+   - id ↔ operating_income: 0.982
+   - id ↔ net_income: 0.974
+   - id ↔ operating_cashflow: 0.972
+   - id ↔ total_assets: 0.948
+   - id ↔ total_liabilities: 0.927
+   - id ↔ profit_margin: 0.780
+   - id ↔ operating_margin: 0.980
+   - id ↔ debt_to_asset: -0.937
+   - revenue ↔ operating_income: 0.999
+   - revenue ↔ net_income: 0.984
+   - revenue ↔ operating_cashflow: 0.994
+   - revenue ↔ total_assets: 0.978
+   - revenue ↔ total_liabilities: 0.930
+   - revenue ↔ profit_margin: 0.746
+   - revenue ↔ operating_margin: 0.953
+   - revenue ↔ debt_to_asset: -0.964
+   - operating_income ↔ net_income: 0.986
+   - operating_income ↔ operating_cashflow: 0.996
+   - operating_income ↔ total_assets: 0.977
+   - operating_income ↔ total_liabilities: 0.929
+   - operating_income ↔ profit_margin: 0.753
+   - operating_income ↔ operating_margin: 0.956
+   - operating_income ↔ debt_to_asset: -0.963
+   - net_income ↔ operating_cashflow: 0.981
+   - net_income ↔ total_assets: 0.946
+   - net_income ↔ total_liabilities: 0.896
+   - net_income ↔ profit_margin: 0.850
+   - net_income ↔ operating_margin: 0.967
+   - net_income ↔ debt_to_asset: -0.959
+   - operating_cashflow ↔ total_assets: 0.984
+   - operating_cashflow ↔ total_liabilities: 0.944
+   - operating_cashflow ↔ profit_margin: 0.743
+   - operating_cashflow ↔ operating_margin: 0.947
+   - operating_cashflow ↔ debt_to_asset: -0.946
+   - total_assets ↔ total_liabilities: 0.970
+   - total_assets ↔ operating_margin: 0.893
+   - total_assets ↔ debt_to_asset: -0.913
+   - total_liabilities ↔ operating_margin: 0.873
+   - total_liabilities ↔ debt_to_asset: -0.809
+   - profit_margin ↔ operating_margin: 0.839
+   - profit_margin ↔ debt_to_asset: -0.752
+   - operating_margin ↔ debt_to_asset: -0.917
+
+2. TIME-SERIES ANALYSIS
+----------------------------------------------------------------------
+
+3. OUTLIER & ANOMALY DETECTION
+----------------------------------------------------------------------
+
+4. FEATURE PREPROCESSING
+----------------------------------------------------------------------
+   Data Shape: (10, 16) → (10, 16)
+   Preprocessing Steps Applied:
+   - Fix infinite values
+   - Handle missing values
+   - Remove constant features
+   - Scale features
+
+   ML-Ready Features: 16 columns
+
+5. GENERATED OUTPUT FILES
+----------------------------------------------------------------------
+   ✓ feature_importance.csv - Feature importance rankings
+   ✓ correlation_matrix.csv - Feature correlation analysis
+   ✓ timeseries_trends.csv - Trend analysis by company
+   ✓ outlier_recommendations.csv - Outlier treatment recommendations
+   ✓ preprocessing_steps.csv - Preprocessing pipeline log
+   ✓ ml_ready_data.csv - Final preprocessed dataset for ML
+
+======================================================================
+Phase 3.2 Complete! Ready for Phase 4: SVR Model Training
+======================================================================
