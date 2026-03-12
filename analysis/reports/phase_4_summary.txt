@@ -1,0 +1,53 @@
+======================================================================
+PHASE 4: SVR GROWTH-RATE PREDICTION (STRATEGY 5)
+======================================================================
+Generated: 2026-02-28 15:18:27
+Data Source: supabase
+Train Size: 77 | Test Size: 14
+Split Cutoff Date: 2022-06-30
+
+1. MODEL EVALUATION
+----------------------------------------------------------------------
+MAE:  106.4039
+RMSE: 165.1828
+R²:   -0.0957
+Residual Mean: 75.6755
+Residual Std:  146.8284
+
+2. CROSS-VALIDATION
+----------------------------------------------------------------------
+CV MAE (mean):  147.2008
+CV RMSE (mean): 244.3969
+CV R² (mean):   -0.1391
+Best Params:
+- svr__C: 1
+- svr__epsilon: 0.01
+- svr__gamma: scale
+- svr__kernel: linear
+
+3. FUTURE PREDICTION & GAP ANALYSIS
+----------------------------------------------------------------------
+AMZN:
+  Current Net Income: $-2.72B
+  Predicted Growth Rate: -57.08%
+  Target Growth Rate: 10.00%
+  Gap: -67.08% (shortfall)
+  95% CI: [-344.86%, 230.71%]
+
+GOOGL:
+  Current Net Income: $132.17B
+  Predicted Growth Rate: -117.88%
+  Target Growth Rate: 10.00%
+  Gap: -127.88% (shortfall)
+  95% CI: [-405.66%, 169.90%]
+
+
+Generated Files:
+- svr_evaluation_metrics.csv
+- svr_cross_validation.csv
+- svr_best_params.csv
+- svr_test_predictions.csv
+- svr_future_predictions.csv
+- svr_actual_vs_predicted.png
+- svr_residuals.png
+- phase_4_summary.txt

@@ -7,53 +7,33 @@ from .data_connection import get_standard_table_data, get_company_data
 
 
 def analyze_trends(ticker=None):
-    """
-    Analyze revenue, profit, and growth trends
-    
-    Args:
-        ticker: Specific ticker or None for all
-    
-    Returns:
-        Dictionary with trend classification per company
-    """
+    """Analyze revenue, profit, and growth trends."""
     print("\n" + "=" * 60)
     print("PHASE 3.1.2: TREND ANALYSIS")
     print("=" * 60)
     
-    if ticker:
-        df = get_company_data(ticker)
-        companies = [ticker]
-    else:
-        df = get_standard_table_data()
-        companies = sorted(df['ticker'].unique())
+    df = get_company_data(ticker) if ticker else get_standard_table_data()
+    companies = [ticker] if ticker else sorted(df['ticker'].unique())
     
     trends_report = {}
-    
     for company in companies:
-        company_data = df[df['ticker'] == company].sort_values('date')
-        
-        if len(company_data) < 2:
+        data = df[df['ticker'] == company].sort_values('date')
+        if len(data) < 2:
             continue
         
-        # Calculate trends
-        revenue_trend = classify_trend(company_data['revenue'].values)
-        profit_trend = classify_trend(company_data['net_income'].values)
-        growth_trend = classify_trend(company_data['revenue_growth'].dropna().values)
-        
         trends_report[company] = {
-            'revenue_trend': revenue_trend,
-            'profit_trend': profit_trend,
-            'growth_trend': growth_trend,
-            'latest_year': company_data['date'].iloc[-1].year,
-            'revenue_latest': company_data['revenue'].iloc[-1],
-            'profit_latest': company_data['net_income'].iloc[-1],
+            'revenue_trend': classify_trend(data['revenue'].values),
+            'profit_trend': classify_trend(data['net_income'].values),
+            'growth_trend': classify_trend(data['revenue_growth'].dropna().values),
+            'latest_year': data['date'].iloc[-1].year,
+            'revenue_latest': data['revenue'].iloc[-1],
+            'profit_latest': data['net_income'].iloc[-1],
         }
         
+        t = trends_report[company]
         print(f"\n{company}:")
-        print(f"  Revenue Trend: {revenue_trend}")
-        print(f"  Profit Trend: {profit_trend}")
-        print(f"  Growth Rate Trend: {growth_trend}")
-        print(f"  Latest (FY {company_data['date'].iloc[-1].year}): Revenue=${company_data['revenue'].iloc[-1]/1e9:.1f}B, Profit=${company_data['net_income'].iloc[-1]/1e9:.1f}B")
+        print(f"  Revenue: {t['revenue_trend']} | Profit: {t['profit_trend']} | Growth: {t['growth_trend']}")
+        print(f"  Latest (FY {t['latest_year']}): Rev=${t['revenue_latest']/1e9:.1f}B, Profit=${t['profit_latest']/1e9:.1f}B")
     
     return trends_report
 
@@ -105,88 +85,64 @@ def classify_trend(values):
 
 
 def calculate_ratios(ticker=None):
-    """
-    Calculate comprehensive financial ratios
-    
-    Args:
-        ticker: Specific ticker or None for all
-    
-    Returns:
-        Dictionary with ratio analysis
-    """
+    """Calculate comprehensive financial ratios."""
     print("\n" + "=" * 60)
     print("PHASE 3.1.3: RATIO ANALYSIS")
     print("=" * 60)
     
-    if ticker:
-        df = get_company_data(ticker)
-        companies = [ticker]
-    else:
-        df = get_standard_table_data()
-        companies = sorted(df['ticker'].unique())
+    df = get_company_data(ticker) if ticker else get_standard_table_data()
+    companies = [ticker] if ticker else sorted(df['ticker'].unique())
     
     ratios_report = {}
-    
     for company in companies:
         company_data = df[df['ticker'] == company].sort_values('date')
-        
-        ratios = {
-            'ticker': company,
-            'profitability_ratios': calculate_profitability_ratios(company_data),
-            'efficiency_ratios': calculate_efficiency_ratios(company_data),
-            'leverage_ratios': calculate_leverage_ratios(company_data),
-            'cash_flow_ratios': calculate_cashflow_ratios(company_data),
-        }
-        
+        ratios = {'ticker': company, **calculate_ratio_metrics(company_data)}
         ratios_report[company] = ratios
         print_ratio_summary(company, ratios)
     
     return ratios_report
 
 
-def calculate_profitability_ratios(company_data):
-    """Calculate profitability metrics"""
-    return {
+def calculate_ratio_metrics(company_data):
+    """Calculate all ratio types in one pass."""
+    # Profitability
+    profitability = {
         'profit_margin_avg': company_data['profit_margin'].mean(),
         'profit_margin_latest': company_data['profit_margin'].iloc[-1],
         'operating_margin_avg': company_data['operating_margin'].mean(),
         'operating_margin_latest': company_data['operating_margin'].iloc[-1],
     }
-
-
-def calculate_efficiency_ratios(company_data):
-    """Calculate efficiency metrics"""
-    return {
+    
+    # Efficiency
+    efficiency = {
         'asset_efficiency_avg': company_data['asset_efficiency'].mean(),
         'asset_efficiency_latest': company_data['asset_efficiency'].iloc[-1],
-        'asset_turnover_trend': (
-            company_data['asset_efficiency'].iloc[-1] - company_data['asset_efficiency'].iloc[0]
-        ),
+        'asset_turnover_trend': company_data['asset_efficiency'].iloc[-1] - company_data['asset_efficiency'].iloc[0],
     }
-
-
-def calculate_leverage_ratios(company_data):
-    """Calculate leverage and solvency metrics"""
-    return {
+    
+    # Leverage
+    leverage = {
         'debt_to_asset_avg': company_data['debt_to_asset'].mean(),
         'debt_to_asset_latest': company_data['debt_to_asset'].iloc[-1],
-        'debt_to_asset_improvement': (
-            company_data['debt_to_asset'].iloc[0] - company_data['debt_to_asset'].iloc[-1]
-        ),
+        'debt_to_asset_improvement': company_data['debt_to_asset'].iloc[0] - company_data['debt_to_asset'].iloc[-1],
         'equity_to_asset_latest': 1 - company_data['debt_to_asset'].iloc[-1],
     }
-
-
-def calculate_cashflow_ratios(company_data):
-    """Calculate cash flow metrics"""
+    
+    # Cash flow
     total_revenue = company_data['revenue'].sum()
     total_cashflow = company_data['operating_cashflow'].sum()
-    
-    return {
+    cash_flow = {
         'total_cashflow': total_cashflow,
         'avg_annual_cashflow': company_data['operating_cashflow'].mean(),
         'cashflow_to_revenue': (total_cashflow / total_revenue) * 100 if total_revenue > 0 else 0,
         'latest_year_cashflow': company_data['operating_cashflow'].iloc[-1],
+    }
+    
+    return {
+        'profitability_ratios': profitability,
+        'efficiency_ratios': efficiency,
+        'leverage_ratios': leverage,
+        'cash_flow_ratios': cash_flow,
     }
 
 

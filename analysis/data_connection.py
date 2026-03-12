@@ -19,54 +19,28 @@ def get_supabase_client():
     return create_client(url, key)
 
 
-def get_standard_table_data():
-    """
-    Fetch all data from standard_table (ML features)
-    
-    Returns:
-        DataFrame with 60 rows x 15 columns
-    """
+def get_table_data(table_name='standard_table'):
+    """Fetch data from specified Supabase table."""
     try:
         supabase = get_supabase_client()
-        response = supabase.table('standard_table').select('*').execute()
+        response = supabase.table(table_name).select('*').execute()
         df = pd.DataFrame(response.data)
-        
-        # Convert date to datetime
         df['date'] = pd.to_datetime(df['date'])
-        
-        # Sort by ticker and date for proper time-series analysis
         df = df.sort_values(['ticker', 'date']).reset_index(drop=True)
-        
-        print(f"✓ Loaded {len(df)} records from standard_table")
         return df
     except Exception as e:
-        print(f"✗ Error loading standard_table: {str(e)}")
+        print(f"✗ Error loading {table_name}: {e}")
         raise
+
+
+def get_standard_table_data():
+    """Fetch standard_table (ML features)."""
+    return get_table_data('standard_table')
 
 
 def get_category_table_data():
-    """
-    Fetch all data from category_table (business context)
-    
-    Returns:
-        DataFrame with 60 rows x 9 columns
-    """
-    try:
-        supabase = get_supabase_client()
-        response = supabase.table('category_table').select('*').execute()
-        df = pd.DataFrame(response.data)
-        
-        # Convert date to datetime
-        df['date'] = pd.to_datetime(df['date'])
-        
-        # Sort by ticker and date
-        df = df.sort_values(['ticker', 'date']).reset_index(drop=True)
-        
-        print(f"✓ Loaded {len(df)} records from category_table")
-        return df
-    except Exception as e:
-        print(f"✗ Error loading category_table: {str(e)}")
-        raise
+    """Fetch category_table (business context)."""
+    return get_table_data('category_table')
 
 
 def get_analysis_data():

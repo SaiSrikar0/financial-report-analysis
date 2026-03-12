@@ -1,0 +1,48 @@
+================================================================================
+PHASE 4 MODEL COMPARISON REPORT
+================================================================================
+Generated: 2026-02-28 14:27:15
+
+STRATEGIES TESTED:
+--------------------------------------------------------------------------------
+1. Absolute Target + GridSearch SVR (baseline)
+2. Top 5 Features + RandomizedSearchCV SVR
+3. LinearRegression Baseline
+4. Linear + SVR Ensemble (average)
+5. Growth-Rate Target + GridSearch SVR
+
+RESULTS RANKED BY R² (BEST TO WORST):
+--------------------------------------------------------------------------------
+
+1. Strategy 3: LinearRegression Baseline
+   R²   =  -0.0435
+   MAE  = 14461727506.10
+   RMSE = 19456571546.05
+
+2. Strategy 5: Growth-Rate Target + GridSearch SVR
+   R²   =  -0.1131
+   MAE  =        14.03
+   RMSE =        17.41
+
+3. Strategy 4: Linear + SVR Ensemble (Average)
+   R²   =  -4.5644
+   MAE  = 41656136861.77
+   RMSE = 44930275109.69
+
+4. Strategy 2: Top 5 Features + RandomizedSearchCV SVR
+   R²   = -14.1492
+   MAE  = 71646389124.76
+   RMSE = 74134981925.37
+
+5. Strategy 1: Absolute + GridSearch SVR
+   R²   = -14.1493
+   MAE  = 71646668198.12
+   RMSE = 74135261551.20
+
+================================================================================
+RECOMMENDATION
+================================================================================
+Best Strategy: Strategy 3: LinearRegression Baseline
+R²: -0.0435
+
+Recommendation: Use this strategy for Phase 4 final model.
