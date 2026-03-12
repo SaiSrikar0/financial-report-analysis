@@ -54,8 +54,14 @@ def run_phase4(target_growth_rate=10.0):
     run_phase4_svr(target_growth_rate=target_growth_rate)
 
 
-def run_all_phases(target_growth_rate=10.0):
-    """Execute complete pipeline: Phases 3.1, 3.2, and 4"""
+def run_phase5(shap_nsamples=200):
+    """Execute Phase 5: SHAP Explainability"""
+    from models.explainability import run_phase5_explainability
+    run_phase5_explainability(shap_nsamples=shap_nsamples)
+
+
+def run_all_phases(target_growth_rate=10.0, shap_nsamples=200):
+    """Execute complete pipeline: Phases 3.1, 3.2, 4, and 5"""
     print("\n" + "="*70)
     print("FINCAST - COMPLETE PIPELINE EXECUTION")
     print("="*70)
@@ -63,6 +69,7 @@ def run_all_phases(target_growth_rate=10.0):
     run_phase3_1()
     run_phase3_2()
     run_phase4(target_growth_rate)
+    run_phase5(shap_nsamples)
     
     print("\n" + "="*70)
     print("ALL PHASES COMPLETE!")
@@ -73,16 +80,22 @@ def main():
     parser = argparse.ArgumentParser(description="FinCast Analysis Pipeline")
     parser.add_argument(
         "phase",
-        choices=["3.1", "3.2", "4", "all"],
+        choices=["3.1", "3.2", "4", "5", "all"],
         nargs="?",
         default="all",
-        help="Phase to run: 3.1 (analysis), 3.2 (features), 4 (ML), or all"
+        help="Phase to run: 3.1 (analysis), 3.2 (features), 4 (ML), 5 (XAI), or all"
     )
     parser.add_argument(
         "--target-growth",
         type=float,
         default=10.0,
         help="Target growth rate for Phase 4 (default: 10.0%%)"
+    )
+    parser.add_argument(
+        "--shap-nsamples",
+        type=int,
+        default=200,
+        help="Number of SHAP sampling evaluations for Phase 5 (default: 200)"
     )
     
     args = parser.parse_args()
@@ -94,8 +107,10 @@ def main():
             run_phase3_2()
         elif args.phase == "4":
             run_phase4(args.target_growth)
+        elif args.phase == "5":
+            run_phase5(args.shap_nsamples)
         else:
-            run_all_phases(args.target_growth)
+            run_all_phases(args.target_growth, args.shap_nsamples)
     except Exception as e:
         print(f"\n✗ Error: {e}")
         import traceback

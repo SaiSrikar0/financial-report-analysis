@@ -1,0 +1,31 @@
+======================================================================
+PHASE 5: EXPLAINABLE AI (SHAP) SUMMARY
+======================================================================
+Generated: 2026-03-12 10:10:22
+Data Source: local_csv
+Cutoff Date (time-aware split): 2021-09-30
+
+1. GLOBAL FEATURE IMPACT (Top 10 by mean |SHAP|)
+----------------------------------------------------------------------
+- asset_efficiency: 8.392491
+- total_assets: 5.137956
+- profit_margin: 5.058786
+- revenue_growth: 4.958975
+- operating_margin: 4.622719
+- net_income: 4.154071
+- operating_income: 3.444994
+- ticker_GOOGL: 2.748276
+- revenue: 2.665944
+- debt_to_asset: 2.487087
+
+2. LOCAL EXPLANATIONS (Future predictions)
+----------------------------------------------------------------------
+- AAPL: predicted growth -32.63% (base value -6.2972)
+- AMZN: predicted growth -47.51% (base value -6.2972)
+- GOOGL: predicted growth -48.28% (base value -6.2972)
+
+Generated Files:
+- global_importance_csv: analysis/reports\phase_5_shap_global_importance.csv
+- global_importance_chart: analysis/reports\phase_5_shap_global_importance.png
+- local_explanations_csv: analysis/reports\phase_5_shap_local_explanations.csv
+- future_predictions_csv: analysis/reports\phase_5_shap_future_predictions.csv
