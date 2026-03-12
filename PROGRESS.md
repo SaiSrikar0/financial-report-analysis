@@ -169,7 +169,8 @@
 
 **Components Built:**
 - `models/svr_pipeline.py` - Full SVR workflow (training, tuning, evaluation, gap analysis)
-- `run_phase4.py` - Orchestrator script for Phase 4 execution
+- `models/svr_pipeline.py` - Full SVR workflow (training, tuning, evaluation, gap analysis)
+- `run.py` - Unified orchestrator (phases 3.1, 3.2, 4)
 
 **Output Files Generated:**
 - `analysis/reports/svr_evaluation_metrics.csv` - Holdout test metrics
@@ -316,11 +317,12 @@
 | ✅ ETL Load & Data in Supabase | Feb 26, 2026 | Complete |
 | ✅ Financial Analysis Module Complete (Phase 3.1 + 3.2) | Feb 26, 2026 | Complete |
 | ✅ SVR Model Trained & Evaluated | Feb 28, 2026 | Complete (Baseline) |
-| ⏳ Explainable AI Integration | Mar 5, 2026 | Pending |
-| ⏳ LLM Recommendations Working | Mar 8, 2026 | Pending |
-| ⏳ Streamlit Dashboard Complete | Mar 12, 2026 | Pending |
-| ⏳ Full Testing & Validation | Mar 15, 2026 | Pending |
-| ⏳ Project Completion & Demo Ready | Mar 20, 2026 | Pending |
+| ✅ Codebase Reorganized & Pushed | Mar 12, 2026 | Complete |
+| ⏳ Explainable AI Integration | TBD | Pending |
+| ⏳ LLM Recommendations Working | TBD | Pending |
+| ⏳ Streamlit Dashboard Complete | TBD | Pending |
+| ⏳ Full Testing & Validation | TBD | Pending |
+| ⏳ Project Completion & Demo Ready | TBD | Pending |
 
 ---
 
@@ -336,12 +338,12 @@
 ✅ Phase 3.2 feature analysis complete (importance, correlation, outliers, preprocessing)  
 ✅ Analysis reports generated in `analysis/reports/`  
 ✅ Phase 4 baseline SVR pipeline complete (training, evaluation, prediction gap analysis)  
+✅ Codebase reorganized — clean folder structure, all paths/imports updated  
 
 ### What's Next (Immediate)
-1. Begin Phase 5 explainable AI (feature contributions / SHAP)
-2. Add local and global explanation outputs for model predictions
-3. Connect explainability outputs to recommendation layer inputs
-4. Expand dataset coverage (all companies/years) to improve model quality
+1. Begin Phase 5 — Explainable AI (SHAP values, local & global feature contributions)
+2. Connect explainability outputs to Phase 6 recommendation layer inputs
+3. Expand dataset coverage to improve SVR model generalization
 
 ### Blockers
 - None - Phase 4 now successfully trains on full 60-row multi-company dataset
@@ -353,30 +355,32 @@
 
 ```
 financial-report-analysis/
+├── run.py                                   (✅ Unified orchestrator - phases 3.1, 3.2, 4)
+├── app.py                                   (⏳ Streamlit entry point - UI pending)
 ├── data/
-│   └── raw/
-│       └── financial_data_raw.json          (✅ Source data - 60 records)
+│   ├── raw/
+│   │   └── financial_data_raw.json          (✅ Source data - 60 records)
+│   └── staged/
+│       ├── standard_table.csv               (✅ 60 rows, 14 features for ML)
+│       └── category_table.csv               (✅ 60 rows with business categories)
 ├── etl/
-│   ├── scripts/
-│   │   ├── extract.py                       (✅ Extraction adapters)
-│   │   ├── transform.py                     (✅ Complete - outputs to etl/data/staged/)
-│   │   └── load.py                          (✅ Updated - Supabase schema ready)
-│   └── data/
-│       ├── raw/
-│       │   └── financial_data_raw.json      (✅ Copy of source)
-│       └── staged/
-│           ├── standard_table.csv           (✅ 60 rows, 14 features for ML)
-│           └── category_table.csv           (✅ 60 rows with business categories)
+│   ├── extract.py                           (✅ Extraction adapters)
+│   ├── transform.py                         (✅ Outputs to data/staged/)
+│   ├── load.py                              (✅ Supabase loader)
+│   └── create_tables.sql                    (✅ Supabase schema)
 ├── analysis/                                (✅ Complete - Phase 3.1 and 3.2 modules)
-├── models/                                  (⏳ To be created)
-├── visualization/                           (⏳ To be created)
-├── streamlit_app.py                         (⏳ To be created)
-├── PROJECT_CONTEXT.md                       (✅ Complete)
-├── PROGRESS.md                              (✅ This file)
-└── README.md                                (⏳ To be created)
+│   └── reports/                             (✅ All analysis + SVR output CSVs/PNGs)
+├── models/
+│   └── svr_pipeline.py                      (✅ Complete - Phase 4)
+├── scripts/
+│   ├── run_feature_analysis.py              (✅ Phase 3.2 orchestrator)
+│   └── clear_and_reload.py                  (✅ DB utility)
+├── data_retrieval/
+│   └── retrieve_api.py                      (✅ API retrieval template)
+├── .gitignore                               (✅ Excludes __pycache__, .venv, .env)
+├── PROJECT_CONTEXT.md                       (✅ Architecture reference)
+└── PROGRESS.md                              (✅ This file)
 ```
-
-**Note:** All transformed data now lives exclusively in `etl/data/staged/`. The project root `data/` folder contains only the raw source file.
 
 ---
 
@@ -427,6 +431,16 @@ financial-report-analysis/
 - trend_analysis.py: 223 → 179 lines (-44) - Consolidated 4 ratio functions into 1
 - svr_pipeline.py: 440 → 397 lines (-43) - Removed absolute-value prediction logic
 - run_feature_analysis.py: 285 → 103 lines (-182) - Simplified report generation
+
+### Codebase Reorganization (March 12, 2026)
+**Folder Structure Cleanup:**
+- `etl/scripts/` flattened → scripts now live directly in `etl/`
+- `etl/data/staged/` consolidated → `data/staged/` (single data home)
+- `etl/data/raw/` duplicate removed — `data/raw/` is the sole source
+- Utility scripts moved to `scripts/`: `run_feature_analysis.py`, `clear_and_reload.py`
+- Typo fixed: `data_retrival/` → `data_retrieval/`
+- All internal paths and imports updated across: `etl/transform.py`, `etl/load.py`, `scripts/clear_and_reload.py`, `scripts/run_feature_analysis.py`, `run.py`, `models/svr_pipeline.py`
+- `.gitignore` added (excludes `__pycache__`, `.venv`, `.env`)
 
 **New Unified Orchestrator:**
 - run.py (107 lines) - Single entry point for all phases
