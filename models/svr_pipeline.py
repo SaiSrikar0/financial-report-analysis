@@ -30,7 +30,7 @@ def load_modeling_data():
         source = "supabase"
     except Exception:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        fallback_path = os.path.join(base_dir, "etl", "data", "staged", "standard_table.csv")
+        fallback_path = os.path.join(base_dir, "data", "staged", "standard_table.csv")
         if not os.path.exists(fallback_path):
             raise
         df = pd.read_csv(fallback_path)

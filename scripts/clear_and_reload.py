@@ -1,6 +1,9 @@
 """Clear Supabase tables and reload with new data."""
+import os
+import sys
 import pandas as pd
 import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from analysis.data_connection import get_supabase_client
 
 def clear_table(client, table_name):
@@ -74,10 +77,10 @@ if __name__ == "__main__":
     
     # Reload tables
     print("\n[3/4] Reloading standard_table...")
-    load_table(client, 'etl/data/staged/standard_table.csv', 'standard_table')
+    load_table(client, 'data/staged/standard_table.csv', 'standard_table')
     
     print("\n[4/4] Reloading category_table...")
-    load_table(client, 'etl/data/staged/category_table.csv', 'category_table')
+    load_table(client, 'data/staged/category_table.csv', 'category_table')
     
     # Verify
     print("\n" + "="*70)

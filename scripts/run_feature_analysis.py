@@ -5,7 +5,7 @@ import sys
 import pandas as pd
 from datetime import datetime
 
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from analysis.feature_analysis import run_feature_analysis
 from analysis.timeseries_analysis import run_timeseries_analysis
 from analysis.outlier_treatment import run_outlier_treatment

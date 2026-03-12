@@ -44,7 +44,7 @@ def run_phase3_1():
 
 def run_phase3_2():
     """Execute Phase 3.2: Feature Analysis"""
-    from run_feature_analysis import run_full_feature_analysis
+    from scripts.run_feature_analysis import run_full_feature_analysis
     run_full_feature_analysis()
 
 

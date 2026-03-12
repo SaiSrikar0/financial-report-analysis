@@ -50,16 +50,16 @@ def apply_field_mapping(data, mapping):
     return mapped_data
 
 def transform_data(raw_path=None):
-    # Get the etl directory (parent of scripts)
-    etl_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    # Get the etl directory (where this file lives)
+    etl_dir = os.path.dirname(os.path.abspath(__file__))
     base_dir = os.path.dirname(etl_dir)  # Project root
     
     # If raw_path not provided, look in the data/raw directory (project root)
     if raw_path is None:
         raw_path = os.path.join(base_dir, 'data', 'raw', 'financial_data_raw.json')
     
-    # Output to etl/data/staged
-    staged_dir = os.path.join(etl_dir, 'data', 'staged')
+    # Output to data/staged (project root)
+    staged_dir = os.path.join(base_dir, 'data', 'staged')
     os.makedirs(staged_dir, exist_ok = True)
     
     # Load raw JSON data
