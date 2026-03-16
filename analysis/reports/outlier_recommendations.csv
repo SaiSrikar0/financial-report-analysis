@@ -1,11 +1,11 @@
 column,issue,treatment,severity
-revenue,High outlier percentage (10.8%),Investigate data quality; consider separate analysis for outlier subset,high
-operating_income,Moderate outlier percentage (5.4%),Apply robust scaling or IOR transformation,medium
-net_income,Moderate outlier percentage (5.4%),Apply robust scaling or IOR transformation,medium
-operating_cashflow,Moderate outlier percentage (7.5%),Apply robust scaling or IOR transformation,medium
-total_liabilities,Moderate outlier percentage (6.5%),Apply robust scaling or IOR transformation,medium
-net_income_growth,High outlier percentage (12.9%),Investigate data quality; consider separate analysis for outlier subset,high
-asset_efficiency,High outlier percentage (11.8%),Investigate data quality; consider separate analysis for outlier subset,high
-sector,Missing values (50),Impute using median/mean or forward-fill for time-series,medium
-category,Missing values (50),Impute using median/mean or forward-fill for time-series,medium
-risk_level,Missing values (50),Impute using median/mean or forward-fill for time-series,medium
+revenue,Moderate outlier percentage (9.5%),Apply robust scaling or IOR transformation,medium
+operating_income,Moderate outlier percentage (8.6%),Apply robust scaling or IOR transformation,medium
+net_income,Moderate outlier percentage (7.4%),Apply robust scaling or IOR transformation,medium
+operating_cashflow,Moderate outlier percentage (8.6%),Apply robust scaling or IOR transformation,medium
+total_assets,Low outlier count (1),Safe to use; consider Winsorization if needed,low
+revenue_growth,High outlier percentage (25.0%),Investigate data quality; consider separate analysis for outlier subset,high
+net_income_growth,High outlier percentage (15.8%),Investigate data quality; consider separate analysis for outlier subset,high
+asset_efficiency,Moderate outlier percentage (5.8%),Apply robust scaling or IOR transformation,medium
+revenue_growth,Missing values (3),Impute using median/mean or forward-fill for time-series,medium
+net_income_growth,Missing values (3),Impute using median/mean or forward-fill for time-series,medium

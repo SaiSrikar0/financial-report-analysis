@@ -10,11 +10,11 @@ from dotenv import load_dotenv
 def get_supabase_client():
     """Initialize and return Supabase client"""
     load_dotenv()
-    url = os.getenv("supabase_url")
-    key = os.getenv("supabase_key")
+    url = os.getenv("SUPABASE_URL") or os.getenv("supabase_url")
+    key = os.getenv("SUPABASE_KEY") or os.getenv("supabase_key")
 
     if not url or not key:
-        raise ValueError("Missing Supabase URL or Supabase KEY in .env")
+        raise ValueError("Missing SUPABASE_URL/SUPABASE_KEY (or supabase_url/supabase_key) in .env")
 
     return create_client(url, key)
 
@@ -29,8 +29,20 @@ def get_table_data(table_name='standard_table'):
         df = df.sort_values(['ticker', 'date']).reset_index(drop=True)
         return df
     except Exception as e:
-        print(f"✗ Error loading {table_name}: {e}")
-        raise
+        print(f"✗ Error loading {table_name} from Supabase: {e}")
+        print(f"→ Falling back to local staged CSV for {table_name}")
+
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        local_path = os.path.join(base_dir, 'data', 'staged', f'{table_name}.csv')
+        if not os.path.exists(local_path):
+            raise
+
+        df = pd.read_csv(local_path)
+        if 'date' in df.columns:
+            df['date'] = pd.to_datetime(df['date'], errors='coerce')
+        if 'ticker' in df.columns and 'date' in df.columns:
+            df = df.sort_values(['ticker', 'date']).reset_index(drop=True)
+        return df
 
 
 def get_standard_table_data():

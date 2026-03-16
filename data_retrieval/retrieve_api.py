@@ -18,13 +18,10 @@ from datetime import datetime
 load_dotenv()
 
 API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
-BASE_URL = os.getenv("ALPHAVANTAGE_BASE_URL")
+BASE_URL = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co/query")
 
 if not API_KEY:
     raise ValueError("Missing ALPHAVANTAGE_API_KEY in .env")
-
-print(API_KEY)
-print(BASE_URL)
 
 
 # -----------------------------

@@ -43,7 +43,7 @@ def detect_statistical_outliers(df, method='iqr', threshold=1.5):
             z_scores = np.abs(stats.zscore(data))
             outlier_mask = z_scores > threshold
         
-        outlier_indices = df[outlier_mask].index.tolist() if len(df[outlier_mask]) > 0 else []
+        outlier_indices = data.index[outlier_mask].tolist() if outlier_mask.any() else []
         
         outliers[col] = {
             'method': method,

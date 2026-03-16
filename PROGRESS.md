@@ -4,6 +4,25 @@
 **Overall Completion:** 72%  
 **Latest Milestone:** ✅ Phase 5 Complete (SHAP Explainability reports generated)
 
+### Consolidation Update (March 16, 2026)
+- [x] Merged cleaner ETL adapter/factory pattern from fincast into `etl/extract.py`
+- [x] Refactored `etl/transform.py` to remove redundant field-mapping layer while preserving Phase 3-5 compatible schema
+- [x] Refactored `etl/load.py` with batch upsert loading and unified environment variable handling
+- [x] Standardized Supabase env key support in `analysis/data_connection.py` (`SUPABASE_*` and legacy `supabase_*`)
+- [x] Removed sensitive API key/base URL debug prints from `data_retrieval/retrieve_api.py`
+- [x] Added missing dependencies used by current implementation (`plotly`, `shap`) in root `requirements.txt`
+- [x] Workspace consolidated to single implementation folder (`financial-report-analysis`); redundant root files and `fincast/` removed
+- [x] Added optional lightweight rule-based recommendation panel in `app.py` (no Phase 6/LLM dependency)
+- [x] Removed/archived redundant artifacts after dependency checks (`etl/data/`, `etl/scripts/`, project-local `.venv/`, and `__pycache__/` folders)
+- [x] Added local CSV fallback in `analysis/data_connection.py` so Phase 3-5 runs remain resilient when Supabase client compatibility fails
+- [x] Fixed Windows summary encoding issue in `scripts/run_feature_analysis.py` by writing UTF-8 reports
+- [x] Full post-merge dry run executed (`python run.py all`) with successful completion (RUN_EXIT:0)
+- [x] Final Phase 3.2 warning-fix pass completed:
+   - `analysis/timeseries_analysis.py` now normalizes current schema (`date`/`revenue`/`net_income`) to legacy analysis aliases
+   - `analysis/outlier_treatment.py` IQR outlier index alignment bug fixed
+   - `analysis/feature_preprocessing.py` missing-value handler made numeric-safe for mixed numeric/categorical data
+- [x] Re-validated with `python run.py 3.2` (RUN32_EXIT:0) and `python run.py all` (RUN_EXIT:0)
+
 ---
 
 ## Phase 1: Project Planning & Design ✅ (100%)

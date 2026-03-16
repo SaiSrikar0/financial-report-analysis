@@ -53,7 +53,7 @@ def save_results(results, report_dir="analysis/reports"):
         )
     
     # Summary report
-    with open(f"{report_dir}/phase_3_2_summary.txt", 'w') as f:
+    with open(f"{report_dir}/phase_3_2_summary.txt", 'w', encoding='utf-8') as f:
         f.write(f"{'='*70}\nPHASE 3.2: FEATURE ANALYSIS SUMMARY\n{'='*70}\n")
         f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         

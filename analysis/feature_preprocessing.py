@@ -62,10 +62,23 @@ def handle_missing_values(df, method='mean'):
     """
     df_copy = df.copy()
     
+    numeric_cols = df_copy.select_dtypes(include=[np.number]).columns.tolist()
+    categorical_cols = [c for c in df_copy.columns if c not in numeric_cols]
+
     if method == 'mean':
-        df_copy = df_copy.fillna(df_copy.mean())
+        if numeric_cols:
+            df_copy[numeric_cols] = df_copy[numeric_cols].fillna(df_copy[numeric_cols].mean(numeric_only=True))
+        for col in categorical_cols:
+            if df_copy[col].isna().any():
+                mode = df_copy[col].mode(dropna=True)
+                df_copy[col] = df_copy[col].fillna(mode.iloc[0] if not mode.empty else 'Unknown')
     elif method == 'median':
-        df_copy = df_copy.fillna(df_copy.median())
+        if numeric_cols:
+            df_copy[numeric_cols] = df_copy[numeric_cols].fillna(df_copy[numeric_cols].median(numeric_only=True))
+        for col in categorical_cols:
+            if df_copy[col].isna().any():
+                mode = df_copy[col].mode(dropna=True)
+                df_copy[col] = df_copy[col].fillna(mode.iloc[0] if not mode.empty else 'Unknown')
     elif method == 'forward_fill':
         df_copy = df_copy.fillna(method='ffill').fillna(method='bfill')
     elif method == 'drop':

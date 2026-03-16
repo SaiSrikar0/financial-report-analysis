@@ -12,6 +12,32 @@ warnings.filterwarnings('ignore')
 from .data_connection import get_standard_table_data
 
 
+def _normalize_timeseries_columns(df):
+    """Bridge legacy column names to current staged schema."""
+    out = df.copy()
+
+    if 'fiscal_year' not in out.columns:
+        if 'date' in out.columns:
+            out['fiscal_year'] = pd.to_datetime(out['date'], errors='coerce').dt.year
+        else:
+            out['fiscal_year'] = np.arange(len(out))
+
+    alias_map = {
+        'total_revenue': 'revenue',
+        'net_profit': 'net_income',
+        'operating_expenses': None,
+    }
+
+    for target_col, source_col in alias_map.items():
+        if target_col not in out.columns:
+            if source_col and source_col in out.columns:
+                out[target_col] = out[source_col]
+            elif target_col == 'operating_expenses' and {'revenue', 'operating_income'}.issubset(out.columns):
+                out[target_col] = (out['revenue'] - out['operating_income']).clip(lower=0)
+
+    return out
+
+
 def decompose_timeseries(df, ticker=None):
     """
     Decompose time-series into trend, seasonal, and residual components.
@@ -23,6 +49,8 @@ def decompose_timeseries(df, ticker=None):
     Returns:
         dict with decomposition components for each metric
     """
+    df = _normalize_timeseries_columns(df)
+
     if ticker:
         df = df[df['ticker'] == ticker].copy()
     
@@ -85,6 +113,8 @@ def detect_seasonality(df, ticker=None, period=4):
     Returns:
         dict with seasonality detection results
     """
+    df = _normalize_timeseries_columns(df)
+
     if ticker:
         df = df[df['ticker'] == ticker].copy()
     
@@ -131,6 +161,8 @@ def identify_growth_periods(df, ticker=None):
     Returns:
         dict with period classifications
     """
+    df = _normalize_timeseries_columns(df)
+
     if ticker:
         df = df[df['ticker'] == ticker].copy()
     
@@ -175,6 +207,8 @@ def calculate_trend_slope(df, ticker=None):
     Returns:
         dict with trend slopes for each metric
     """
+    df = _normalize_timeseries_columns(df)
+
     if ticker:
         df = df[df['ticker'] == ticker].copy()
     

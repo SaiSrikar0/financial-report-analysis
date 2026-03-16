@@ -1,263 +1,274 @@
-# FinCast: Financial Report Analysis and Recommendation System
+# FinCast — Financial Forecasting and Recommendation System
 
-## Project Context & Documentation
-
-Abstract – Financial Report Analysis (FinCast)
-1. Problem / Need
-Financial reports are complex, heterogeneous, and time‑consuming to analyze manually.
-
-Existing systems focus mainly on historical analysis and lack future prediction and explainable insights.
-
-2. Objective
-To develop an automated system that analyzes financial reports, predicts future performance, and provides explainable recommendations for decision‑making.
-
-3. Methodology
-Financial data is collected from multiple real‑world sources and processed using an ETL pipeline.
-
-Key financial features are analyzed and used to train a Support Vector Regression (SVR) model for forecasting.
-
-Explainable AI techniques and an LLM are used to generate interpretable, actionable recommendations.
-
-4. Results / Benefits
-Accurate financial forecasts with clear trend visualization.
-
-Improved transparency through explainable insights.
-
-Reduced manual effort and better decision support.
-
-5. Conclusion / Impact
-The project transforms traditional financial analysis into an intelligent, explainable, and future‑oriented decision‑support system.
-
-
-## Project Overview
-
-### Problem Statement
-
-Financial reports such as income statements, balance sheets, and cash flow statements form the backbone of corporate decision‑making. However, these reports are typically large, complex, and heterogeneous, making manual analysis difficult, time‑consuming, and error‑prone.
-
-**Key Challenges:**
-- Traditional financial analysis approaches primarily focus on historical performance
-- Lack of robust mechanisms for forecasting future outcomes
-- Existing tools fail to provide explainable insights
-- Difficulty translating numerical results into actionable business decisions
-
-**Solution Need:** An automated, intelligent system capable of analyzing financial reports, predicting future performance, and supporting informed financial decision‑making through explainable insights.
-
----
-
-## Proposed Solution
-
-An end‑to‑end Financial Report Analysis system that:
-
-1. **Automates** financial data collection, cleaning, and integration using a structured ETL pipeline
-2. **Extracts and analyzes** key financial indicators to evaluate historical performance
-3. **Applies** machine learning techniques to forecast future profit or growth
-4. **Uses** explainable AI to generate interpretable, business‑oriented recommendations
-
----
-
-## System Workflow
-
-```
-Financial Data Collection
-    ↓
-ETL Pipeline (Extract, Transform, Normalize)
-    ↓
-Centralized Database (PostgreSQL via Supabase)
-    ↓
-Financial Analysis & Feature Engineering
-    ↓
-SVR Model Training
-    ↓
-Prediction
-    ↓
-LLM‑Based Recommendation Generation
-    ↓
-User‑Readable Output & Visualizations
-```
-
----
-
-## Data Collection
-
-### Sources
-- Publicly available and reliable financial data sources
-- Financial APIs
-- Structured CSV / Excel datasets
-
-### Dataset Strategy
-- Multiple companies supported (multi‑company datasets)
-- Historical financial statements (income, balance sheet, cash flow)
-- Time‑ordered data (no random shuffling)
-
-### Assumption
-"Real‑time data" refers to real‑world, periodically updated financial data, not live streaming feeds.
-
----
-
-## ETL Pipeline Design
-
-### Extraction
-- Data collected from APIs and structured files
-- Adapter‑based extraction
-- All inputs converted into a unified internal raw format (JSON)
-
-### Transformation
-- Data cleaning and normalization
-- Mapping‑based standardization
-- Feature engineering (revenue trends, profit margins, growth rates, expense patterns)
-
-### Loading
-- Integrated and cleaned data stored in a centralized PostgreSQL database via Supabase
-
----
-
-## Database Design
-
-### Design Principle
-Hybrid schema to handle heterogeneous company financial structures without schema explosion.
-
-### Tables
-
-#### 1. Standardized Financial Table (for ML)
-**Fields:**
-- total_revenue
-- operating_expenses
-- net_profit
-- growth_rate
-- profit_margin
-
-**Used for:**
-- Model training
-- Forecasting
-- Comparative analysis
-
-#### 2. Flexible Breakdown Table (for Analysis & Recommendations)
-**Fields:**
-- company_id
-- year
-- income/expense type
-- category
-- amount
-
-**Used for:**
-- Detailed financial analysis
-- Recommendation generation
-
----
-
-## Financial Analysis
-
-**Key Indicators Computed:**
-- Revenue trends
-- Profit margins
-- Growth rates
-- Expense patterns
-
-**Purpose:**
-- Feature engineering to support predictive modeling
-
----
-
-## Machine Learning
-
-### Model Used
-**Support Vector Regression (SVR)**
-
-### Purpose
-Predict future financial performance (profit or growth)
-
-### Training Strategy
-- Time‑aware train–test split
-- Historical data used for training
-- Evaluation using regression metrics (MAE, RMSE, R²)
-
-### Prediction & Gap Identification
-- Predicted values are compared against predefined financial targets
-- System identifies:
-  - Prediction shortfall or surplus
-  - Magnitude of deviation
-- Enables decision‑oriented analysis rather than raw forecasting
-
----
-
-## Explainable AI Integration
-
-### Meaning
-Explainable AI is implemented through feature contribution analysis, identifying how individual financial features influence the model's prediction.
-
-### Role
-- Improves transparency and interpretability
-- Provides analytical grounding for recommendations
-- Prevents black‑box decision‑making
-
----
-
-## Recommendation Generation (LLM‑Based)
-
-### LLM Role
-Converts analytical outputs into natural‑language recommendations
-
-**Generates business‑oriented insights based on:**
-- Predictions
-- Target gaps
-- Feature contributions
-
-### Explicit Constraints
-- LLM does not perform numeric prediction
-- No Retrieval‑Augmented Generation (RAG)
-- Recommendations are grounded strictly in model outputs and analysis
-
----
-
-## Technologies Used
-
-| Category | Technology |
-|----------|-----------|
-| **Programming Language** | Python |
-| **Database** | PostgreSQL (via Supabase) |
-| **Data Processing** | NumPy, Pandas |
-| **Visualization** | Matplotlib, Seaborn |
-| **Machine Learning** | Scikit‑learn (SVR) |
-| **Frontend / Interface** | Streamlit |
-| **Explainable AI Layer** | LLM API |
-
----
-
-## Key Features (Prototype Scope)
-
-1. Automated financial data integration through an ETL pipeline
-2. Multi‑company dataset support
-3. Standardized and flexible financial data storage
-4. In‑depth financial performance analysis and feature engineering
-5. Predictive financial forecasting using Support Vector Regression
-6. Visual representation of financial data
-7. Explainable AI‑based recommendation generation
-8. Prediction gap identification
-9. User‑readable analytical output
-
----
-
-## Unique Feature (Core Contribution)
-
-**Target‑aware financial forecasting with explainable, data‑driven recommendations.**
-
-This differentiates the system from traditional tools that stop at reporting or prediction.
-
----
-
-## Constraints
-
-- Academic prototype scope
-- No live streaming data
-- No dynamic database schema creation
-- No GPU dependency
-- No deep learning requirement
-- No RAG usage
-
----
-
----
-
-**Document Created:** January 22, 2026  
 **Last Updated:** March 12, 2026
+
+---
+
+## 1. Project Overview
+
+FinCast is an end‑to‑end financial analytics platform that automates financial data collection, performs in‑depth analysis, forecasts future performance, and generates explainable, actionable recommendations.
+
+| Layer | Responsibility |
+|---|---|
+| Data Retrieval | Alpha Vantage API ingestion |
+| ETL Pipeline | Extract → Transform → Load into Supabase |
+| Analysis Engine | Feature engineering, trend/peer/outlier analysis |
+| ML Forecasting | SVR growth‑rate prediction with confidence intervals |
+| Explainability | SHAP global + local feature contribution analysis |
+| Recommendation Engine | LLM‑based narrative generation (Phase 6) |
+| Dashboard | Interactive Streamlit visualization |
+
+**Core contribution:** Target‑aware financial forecasting with explainable, data‑driven recommendations — going beyond traditional historical reporting tools.
+
+---
+
+## 2. Objectives
+
+- Automate financial data collection from reliable financial APIs
+- Build a flexible ETL pipeline for heterogeneous financial data
+- Engineer financial features and analyze historical statements
+- Predict future growth rates using SVR with gap analysis vs targets
+- Explain predictions using SHAP feature contributions
+- Generate actionable LLM‑based natural language recommendations
+- Visualize all layers in an interactive multi‑tab dashboard
+
+
+---
+
+## 3. System Architecture
+
+```
+Financial Data Sources (Alpha Vantage API / Uploaded Data)
+                │
+                ▼
+        Data Retrieval Layer
+        data_retrieval/retrieve_api.py
+                │
+                ▼
+            ETL Pipeline
+      Extract → Transform → Load
+      etl/extract.py → etl/transform.py → etl/load.py
+                │
+                ▼
+     Supabase PostgreSQL Database
+     standard_table (ML) + category_table (LLM)
+                │
+                ▼
+    Financial Analysis Engine (analysis/)
+    Trend · Peer Comparison · Feature Engineering
+                │
+                ▼
+    SVR Growth-Rate Prediction (models/svr_pipeline.py)
+    GridSearchCV · Confidence Intervals · Gap Analysis
+                │
+                ▼
+    SHAP Explainability Layer (models/explainability.py)
+    Global Importance · Local Contributions per Company
+                │
+                ▼
+    LLM Recommendation Engine (Phase 6 — pending)
+                │
+                ▼
+    Interactive Streamlit Dashboard (app.py)
+```
+
+---
+
+## 4. Data Sources
+
+Financial data is retrieved from the **Alpha Vantage API** for AAPL, MSFT, and GOOGL (2006–2025).
+
+**Collected statements:**
+- Income Statement: Revenue, Operating Income, Net Income
+- Balance Sheet: Total Assets, Total Liabilities
+- Cash Flow Statement: Operating Cash Flow
+
+**Example record:**
+```json
+{
+  "date": "2024-09-30",
+  "ticker": "AAPL",
+  "revenue": 391035000000,
+  "operating_income": 123216000000,
+  "net_income": 93736000000,
+  "total_assets": 364980000000,
+  "total_liabilities": 308030000000,
+  "operating_cashflow": 118254000000
+}
+```
+
+**Dataset scale:** 60 records × 3 companies × 20 years
+
+---
+
+## 5. ETL Pipeline
+
+### 5.1 Extract
+Adapter‑based extraction supports: Financial APIs · CSV · Excel · User uploads  
+Raw output: `data/raw/financial_data_raw.json`
+
+### 5.2 Transform
+**Data cleaning:** missing value handling, type normalization, schema standardization
+
+**Engineered features:**
+
+| Feature | Formula |
+|---|---|
+| `profit_margin` | `net_income / revenue` |
+| `operating_margin` | `operating_income / revenue` |
+| `debt_to_asset` | `total_liabilities / total_assets` |
+| `asset_efficiency` | `revenue / total_assets` |
+| `revenue_growth` | YoY % change in revenue |
+| `net_income_growth` | YoY % change in net income |
+
+**Output tables:**
+- `data/staged/standard_table.csv` — 60 rows × 14 features for ML training
+- `data/staged/category_table.csv` — 60 rows with business‑context categories for LLM
+
+### 5.3 Load
+Batch‑insert both tables into Supabase (PostgreSQL).  
+Tables: `standard_table` (ML), `category_table` (recommendations)
+
+---
+
+## 6. Machine Learning Model (Phase 4)
+
+**Model:** Support Vector Regression (SVR) via Scikit‑learn
+
+**Why SVR:** Handles structured numerical data, captures nonlinear relationships, works well on moderate‑sized datasets.
+
+**Prediction task:** Forecast **next‑period revenue growth rate (% YoY)** — not absolute values, enabling interpretable gap analysis vs targets.
+
+**Input features (14):**
+`revenue`, `operating_income`, `net_income`, `total_assets`, `total_liabilities`, `operating_cashflow`, `profit_margin`, `operating_margin`, `debt_to_asset`, `asset_efficiency`, `revenue_growth`, `net_income_growth`, `ticker_AAPL`, `ticker_GOOGL`
+
+**Training strategy:**
+- Time‑aware chronological split (no data leakage)
+- GridSearchCV hyperparameter optimization
+- Best params: kernel=`linear`, C=`1`, epsilon=`0.01`, gamma=`scale`
+
+**Evaluation results:**
+| Metric | Value |
+|---|---|
+| MAE | 106.40% |
+| RMSE | 165.18% |
+| R² | −0.0957 |
+
+**Gap analysis:** Predicted growth vs target (10%) → shortfall/surplus with 95% confidence intervals
+
+---
+
+## 7. SHAP Explainability (Phase 5)
+
+SHAP (SHapley Additive exPlanations) is applied to the trained SVR model to explain prediction drivers.
+
+**Global importance:** Mean absolute SHAP values ranked across all features  
+**Top features:** `asset_efficiency` (8.39), `total_assets` (5.14), `profit_margin` (5.06)
+
+**Local explanations:** Per‑company feature contributions showing which factors increase or decrease the predicted growth rate
+
+**Outputs:**
+- `analysis/reports/phase_5_shap_global_importance.csv`
+- `analysis/reports/phase_5_shap_local_explanations.csv`
+- `analysis/reports/phase_5_shap_future_predictions.csv`
+
+---
+
+## 8. Recommendation Engine (Phase 6 — Pending)
+
+An LLM converts structured analysis outputs into natural language recommendations.
+
+**LLM inputs:**
+- SVR predicted growth rate and confidence interval
+- Gap vs target (shortfall/surplus)
+- Top positive and negative SHAP feature contributions
+- Key financial ratios
+
+**LLM output example:**
+> The company shows strong revenue growth and healthy profitability. However, the high debt ratio indicates reliance on external financing. Reducing liabilities or improving asset utilization could improve financial stability.
+
+**Constraints:** LLM generates narrative only — no numeric prediction. No RAG. Grounded strictly in model outputs.
+
+---
+
+## 9. Dashboard (Phase 7 — Pending)
+
+Interactive Streamlit dashboard with three tabs:
+
+| Tab | Content |
+|---|---|
+| 📊 Historical Analysis | KPI cards · Revenue trend · Bar comparisons · 3D scatter · Data table |
+| 🎯 SVR Predictions | Model metrics · Hyperparameters · CI visualization · Predicted vs actual |
+| 🔍 SHAP Explainability | Global feature importance · Local contributions per company |
+
+**Sidebar controls:** Company filter · Year range · Data source toggle · Metric selector
+
+---
+
+## 10. Technology Stack
+
+| Component | Technology |
+|---|---|
+| Language | Python 3.11 |
+| Data Processing | Pandas · NumPy |
+| Data Retrieval | Alpha Vantage API |
+| Database | Supabase (PostgreSQL) |
+| Machine Learning | Scikit‑learn (SVR + GridSearchCV) |
+| Explainability | SHAP (KernelExplainer) |
+| Visualization | Plotly |
+| Dashboard | Streamlit |
+| Environment | python‑dotenv |
+
+---
+
+## 11. Project Folder Structure
+
+```
+financial-report-analysis/
+├── app.py                          ← Streamlit dashboard (Phases 1–5 integrated)
+├── run.py                          ← Unified CLI orchestrator
+├── data/
+│   ├── raw/financial_data_raw.json ← Source data (60 records)
+│   └── staged/
+│       ├── standard_table.csv      ← ML-ready (60 rows × 14 features)
+│       └── category_table.csv      ← LLM-ready categories
+├── data_retrieval/retrieve_api.py  ← Alpha Vantage API adapter
+├── etl/
+│   ├── extract.py                  ← Multi-source extraction adapters
+│   ├── transform.py                ← Feature engineering pipeline
+│   └── load.py                     ← Supabase batch loader
+├── analysis/
+│   ├── data_connection.py
+│   ├── historical_performance.py
+│   ├── trend_analysis.py
+│   ├── peer_comparison.py
+│   ├── insights.py
+│   ├── feature_analysis.py
+│   ├── timeseries_analysis.py
+│   ├── outlier_treatment.py
+│   ├── feature_preprocessing.py
+│   └── reports/                    ← All generated CSVs + PNGs
+├── models/
+│   ├── svr_pipeline.py             ← Phase 4: SVR training + gap analysis
+│   └── explainability.py           ← Phase 5: SHAP global + local explanations
+└── scripts/
+    ├── run_feature_analysis.py
+    └── clear_and_reload.py
+```
+
+---
+
+## 12. Phase Summary
+
+| Phase | Description | Status |
+|---|---|---|
+| 1 | Project Planning & Design | ✅ Complete |
+| 2 | ETL Pipeline | ✅ Complete |
+| 3.1 | Financial Analysis | ✅ Complete |
+| 3.2 | Feature Analysis | ✅ Complete |
+| 4 | SVR Forecasting | ✅ Complete |
+| 5 | SHAP Explainability | ✅ Complete |
+| 6 | LLM Recommendations | ⏳ Pending |
+| 7 | Streamlit Dashboard | 🔄 In Progress |
+| 8 | Testing & Validation | ⏳ Pending |
+| 9 | Documentation & Deployment | ⏳ Pending |

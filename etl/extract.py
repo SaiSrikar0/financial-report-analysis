@@ -1,85 +1,81 @@
-#import necessary libraries
-import os
+"""ETL extract layer with adapter/factory pattern."""
+
 import json
-import pandas as pd
+import os
 from abc import ABC, abstractmethod
-from datetime import datetime
 
-# Extractor Adapter Interface
-class DataExtractor(ABC):
+import pandas as pd
+
+
+class BaseExtractor(ABC):
+    """Abstract extractor interface."""
+
     @abstractmethod
-    def extract(self):
-        pass
+    def extract(self, source: str) -> pd.DataFrame:
+        raise NotImplementedError
 
-# CSV Extractor Adapter
-class CSVExtractor(DataExtractor):
-    def __init__(self, file_path):
-        self.file_path = file_path
-    
-    def extract(self):
-        df = pd.read_csv(self.file_path)
-        return df.to_dict('records')
 
-# Excel Extractor Adapter
-class ExcelExtractor(DataExtractor):
-    def __init__(self, file_path, sheet_name=0):
-        self.file_path = file_path
-        self.sheet_name = sheet_name
-    
-    def extract(self):
-        df = pd.read_excel(self.file_path, sheet_name=self.sheet_name)
-        return df.to_dict('records')
+class CSVExtractor(BaseExtractor):
+    def extract(self, source: str) -> pd.DataFrame:
+        return pd.read_csv(source)
 
-# API Extractor Adapter (Template for future implementation)
-class APIExtractor(DataExtractor):
-    def __init__(self, api_url, api_key=None):
-        self.api_url = api_url
-        self.api_key = api_key
-    
-    def extract(self):
-        # TODO: Implement API call logic
-        # Example: requests.get(self.api_url, headers={'Authorization': f'Bearer {self.api_key}'})
-        # For now, return sample data
-        sample_data = [
-            {"date": "2026-01-21", "ticker": "AAPL", "open_price": 150.0, "close_price": 155.0},
-            {"date": "2026-01-21", "ticker": "GOOGL", "open_price": 2800.0, "close_price": 2850.0}
-        ]
-        return sample_data
 
-#function to extract and save data
-def extract_data(source_type='api', source_path=None):
+class ExcelExtractor(BaseExtractor):
+    def extract(self, source: str) -> pd.DataFrame:
+        return pd.read_excel(source)
+
+
+class JSONExtractor(BaseExtractor):
+    def extract(self, source: str) -> pd.DataFrame:
+        with open(source, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return pd.DataFrame(data)
+
+
+class ExtractorFactory:
+    @staticmethod
+    def get(source_type: str) -> BaseExtractor:
+        source_type = source_type.lower().strip()
+        if source_type == "csv":
+            return CSVExtractor()
+        if source_type == "excel":
+            return ExcelExtractor()
+        if source_type in {"json", "api"}:
+            return JSONExtractor()
+        raise ValueError(f"Unsupported source type: {source_type}")
+
+
+def extract_data(source_type="api", source_path=None):
     """
-    Extract financial data using appropriate adapter and save as JSON
-    
+    Extract financial data and save a normalized raw JSON file.
+
     Args:
-        source_type: 'api', 'csv', or 'excel'
-        source_path: path to file (for csv/excel) or API URL
+        source_type: 'api', 'json', 'csv', or 'excel'
+        source_path: source file path; for 'api' this expects a JSON dump path
     """
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    data_dir = os.path.join(base_dir, 'data', 'raw')
-    os.makedirs(data_dir, exist_ok = True)
-    
-    # Select appropriate extractor adapter
-    if source_type == 'csv':
-        extractor = CSVExtractor(source_path)
-    elif source_type == 'excel':
-        extractor = ExcelExtractor(source_path)
-    elif source_type == 'api':
-        extractor = APIExtractor(source_path or 'https://api.example.com/financial-data')
-    else:
-        raise ValueError(f"Unsupported source type: {source_type}")
-    
-    # Extract data using adapter
-    data = extractor.extract()
-    
-    # Save as raw JSON
-    raw_path = os.path.join(data_dir, 'financial_data_raw.json')
-    with open(raw_path, 'w') as f:
-        json.dump(data, f, indent=2)
-    
-    print(f"Data extracted and saved to {raw_path}")
-    print(f"Total records extracted: {len(data)}")
-    return raw_path
+    data_dir = os.path.join(base_dir, "data", "raw")
+    os.makedirs(data_dir, exist_ok=True)
+
+    default_raw = os.path.join(data_dir, "financial_data_raw.json")
+    input_path = source_path or default_raw
+
+    if source_type.lower() in {"api", "json"} and not os.path.exists(input_path):
+        raise FileNotFoundError(
+            "For source_type 'api'/'json', provide a local JSON path or generate data via data_retrieval/retrieve_api.py"
+        )
+
+    extractor = ExtractorFactory.get(source_type)
+    df = extractor.extract(input_path)
+
+    records = df.to_dict("records")
+    with open(default_raw, "w", encoding="utf-8") as f:
+        json.dump(records, f, indent=2)
+
+    print(f"Data extracted and saved to {default_raw}")
+    print(f"Total records extracted: {len(records)}")
+    return default_raw
+
 
 if __name__ == "__main__":
-    extract_data()
+    extract_data(source_type="json")

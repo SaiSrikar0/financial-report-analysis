@@ -2,4 +2,4 @@ step,infinite_values_fixed,missing_values_handled,method,constant_features_remov
 Fix infinite values,0.0,,,,,
 Handle missing values,,0.0,median,,,
 Remove constant features,,,,0.0,[],
-Scale features,,,standard,,,13.0
+Scale features,,,standard,,,12.0
