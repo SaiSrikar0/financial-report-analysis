@@ -902,7 +902,7 @@ if page == "📊 Dashboard":
         svr_data = load_svr_predictions()
 
         if not svr_data:
-            st.warning("Phase 4 SVR data not available. Run `python run.py 4`.")
+            st.warning("Phase 4 SVR data not available. Use Upload Data in this app to train SVR first.")
         else:
             if "metrics" in svr_data:
                 metrics = svr_data["metrics"]
@@ -1038,7 +1038,7 @@ if page == "📊 Dashboard":
         shap_data = load_shap_data()
 
         if not shap_data:
-            st.warning("Phase 5 SHAP data not available. Run `python run.py 5`.")
+            st.warning("Phase 5 SHAP data not available. Train SVR from Upload Data in this app first.")
         else:
             if "global_importance" in shap_data:
                 st.markdown("<div class='panel'>", unsafe_allow_html=True)
@@ -1348,7 +1348,7 @@ elif page == "🤖 AI Recommendations":
     if not all_tickers:
         st.info(
             "No data available for recommendations. "
-            "Run `python run.py 4` to generate SVR predictions, or upload a report first."
+            "Use Upload Data in this app to generate SVR predictions, or upload a report first."
         )
         st.stop()
 
@@ -1392,7 +1392,7 @@ elif page == "🤖 AI Recommendations":
                 if not bundle.get("svr_predictions"):
                     st.warning(
                         f"No SVR predictions found for {selected_ticker}. "
-                        "Run `python run.py 4` first."
+                        "Train SVR first from Upload Data in this app."
                     )
                     st.stop()
                 recs = generate_recommendations(bundle)

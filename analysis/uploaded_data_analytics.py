@@ -243,7 +243,7 @@ def display_svr_analysis_for_ticker(ticker: str):
     svr_path = os.path.join(reports_dir, "svr_future_predictions.csv")
     
     if not os.path.exists(svr_path):
-        st.info("SVR predictions not available. Run `python run.py 4` first.")
+        st.info("SVR predictions not available. Train SVR from the Upload Data section first.")
         return
     
     try:
@@ -282,7 +282,7 @@ def display_shap_analysis_for_ticker(ticker: str):
     shap_path = os.path.join(reports_dir, "phase_5_shap_global_importance.csv")
     
     if not os.path.exists(shap_path):
-        st.info("SHAP analysis not available. Run `python run.py 5` first.")
+        st.info("SHAP analysis not available. Train SVR from the Upload Data section first.")
         return
     
     try:

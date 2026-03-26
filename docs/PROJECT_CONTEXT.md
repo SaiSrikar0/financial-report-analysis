@@ -1,6 +1,6 @@
 # FinCast — Financial Forecasting and Recommendation System
 
-**Last Updated:** March 12, 2026
+**Last Updated:** March 26, 2026
 
 ---
 
@@ -66,7 +66,7 @@ Financial Data Sources (Alpha Vantage API / Uploaded Data)
     Global Importance · Local Contributions per Company
                 │
                 ▼
-    LLM Recommendation Engine (Phase 6 — pending)
+    LLM Recommendation Engine (Phase 6 — Integrated Baseline)
                 │
                 ▼
     Interactive Streamlit Dashboard (app.py)
@@ -145,14 +145,14 @@ Tables: `standard_table` (ML), `category_table` (recommendations)
 **Training strategy:**
 - Time‑aware chronological split (no data leakage)
 - GridSearchCV hyperparameter optimization
-- Best params: kernel=`linear`, C=`1`, epsilon=`0.01`, gamma=`scale`
+- Best params: kernel=`rbf`, C=`50`, epsilon=`0.01`, gamma=`auto`
 
 **Evaluation results:**
 | Metric | Value |
 |---|---|
-| MAE | 106.40% |
-| RMSE | 165.18% |
-| R² | −0.0957 |
+| MAE | 105.21% |
+| RMSE | 171.23% |
+| R² | −0.1210 |
 
 **Gap analysis:** Predicted growth vs target (10%) → shortfall/surplus with 95% confidence intervals
 
@@ -163,7 +163,7 @@ Tables: `standard_table` (ML), `category_table` (recommendations)
 SHAP (SHapley Additive exPlanations) is applied to the trained SVR model to explain prediction drivers.
 
 **Global importance:** Mean absolute SHAP values ranked across all features  
-**Top features:** `asset_efficiency` (8.39), `total_assets` (5.14), `profit_margin` (5.06)
+**Top features:** `asset_efficiency` (8.21), `revenue_growth` (5.20), `total_assets` (5.09)
 
 **Local explanations:** Per‑company feature contributions showing which factors increase or decrease the predicted growth rate
 
@@ -174,9 +174,11 @@ SHAP (SHapley Additive exPlanations) is applied to the trained SVR model to expl
 
 ---
 
-## 8. Recommendation Engine (Phase 6 — Pending)
+## 8. Recommendation Engine (Phase 6 — Integrated Baseline)
 
 An LLM converts structured analysis outputs into natural language recommendations.
+Current implementation uses Groq with `llama-3.3-70b-versatile` and generates
+per-ticker recommendation JSON files from Phase 4 + 5 artifacts.
 
 **LLM inputs:**
 - SVR predicted growth rate and confidence interval
@@ -191,7 +193,7 @@ An LLM converts structured analysis outputs into natural language recommendation
 
 ---
 
-## 9. Dashboard (Phase 7 — Pending)
+## 9. Dashboard (Phase 7 — In Progress)
 
 Interactive Streamlit dashboard with three tabs:
 
@@ -225,8 +227,10 @@ Interactive Streamlit dashboard with three tabs:
 
 ```
 financial-report-analysis/
-├── app.py                          ← Streamlit dashboard (Phases 1–5 integrated)
+├── app.py                          ← Streamlit dashboard (Phases 1–6 integrated)
 ├── run.py                          ← Unified CLI orchestrator
+├── auth/
+│   └── supabase_auth.py            ← Auth (login/signup/session restore)
 ├── data/
 │   ├── raw/financial_data_raw.json ← Source data (60 records)
 │   └── staged/
@@ -247,6 +251,8 @@ financial-report-analysis/
 │   ├── timeseries_analysis.py
 │   ├── outlier_treatment.py
 │   ├── feature_preprocessing.py
+│   ├── auto_analysis.py            ← Uploaded ticker auto-analysis (Phase 4/5)
+│   ├── recommendation_engine.py    ← Phase 6 LLM recommendation generation
 │   └── reports/                    ← All generated CSVs + PNGs
 ├── models/
 │   ├── svr_pipeline.py             ← Phase 4: SVR training + gap analysis
@@ -268,7 +274,7 @@ financial-report-analysis/
 | 3.2 | Feature Analysis | ✅ Complete |
 | 4 | SVR Forecasting | ✅ Complete |
 | 5 | SHAP Explainability | ✅ Complete |
-| 6 | LLM Recommendations | ⏳ Pending |
+| 6 | LLM Recommendations | ✅ Complete (Integrated Baseline) |
 | 7 | Streamlit Dashboard | 🔄 In Progress |
 | 8 | Testing & Validation | ⏳ Pending |
 | 9 | Documentation & Deployment | ⏳ Pending |
