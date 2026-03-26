@@ -5,6 +5,7 @@ Run complete analysis pipeline or specific phases
 """
 
 import argparse
+import os
 import sys
 
 
@@ -124,6 +125,10 @@ def run_all_phases(target_growth_rate=10.0, shap_nsamples=200):
 
 
 def main():
+    # CLI pipeline runs without a Streamlit user session, so allow service-role
+    # reads when SUPABASE_SERVICE_ROLE_KEY is available.
+    os.environ.setdefault("SUPABASE_USE_SERVICE_ROLE", "1")
+
     parser = argparse.ArgumentParser(description="FinCast Analysis Pipeline")
     parser.add_argument(
         "phase",

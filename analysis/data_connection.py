@@ -9,10 +9,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _is_truthy(value: str) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_supabase_client():
     """Initialize and return Supabase client"""
     url = os.getenv("SUPABASE_URL") or os.getenv("supabase_url")
-    key = os.getenv("SUPABASE_KEY") or os.getenv("supabase_key")
+    anon_key = os.getenv("SUPABASE_KEY") or os.getenv("supabase_key")
+    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    use_service_role = _is_truthy(os.getenv("SUPABASE_USE_SERVICE_ROLE", "0"))
+
+    key = anon_key
+    if use_service_role and service_role_key:
+        key = service_role_key
+
     if not url or not key:
         raise ValueError(
             "Missing SUPABASE_URL/SUPABASE_KEY (or supabase_url/supabase_key) in .env"
@@ -39,9 +50,14 @@ def get_table_data(table_name="standard_table"):
     try:
         supabase = get_supabase_client()
         response = supabase.table(table_name).select("*").execute()
+        if not response.data:
+            raise ValueError(f"No rows returned from Supabase table: {table_name}")
+
         df = pd.DataFrame(response.data)
-        df["date"] = pd.to_datetime(df["date"])
-        df = df.sort_values(["ticker", "date"]).reset_index(drop=True)
+        if "date" in df.columns:
+            df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        if "ticker" in df.columns and "date" in df.columns:
+            df = df.sort_values(["ticker", "date"]).reset_index(drop=True)
         return df
     except Exception as e:
         print(f"✗ Error loading {table_name} from Supabase: {e}")

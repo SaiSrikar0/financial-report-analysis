@@ -282,6 +282,42 @@ def metric_tile(label: str, value: str) -> None:
     )
 
 
+def infer_ticker_from_upload(raw_records: list, filename: str) -> tuple[str, str]:
+    """Infer ticker from raw records first, then fall back to filename stem."""
+    candidate_keys = [
+        "ticker",
+        "symbol",
+        "stock_symbol",
+        "company_ticker",
+        "security_symbol",
+    ]
+
+    counts = {}
+    for rec in raw_records or []:
+        if not isinstance(rec, dict):
+            continue
+        for key in candidate_keys:
+            val = rec.get(key)
+            if val is None:
+                continue
+            txt = str(val).strip().upper()
+            if not txt:
+                continue
+            if len(txt) <= 12 and " " not in txt:
+                counts[txt] = counts.get(txt, 0) + 1
+
+    if counts:
+        ticker = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        return ticker, "file data"
+
+    stem = Path(filename).stem.upper()
+    parts = [p for p in "".join(ch if ch.isalnum() else " " for ch in stem).split() if p]
+    if parts:
+        return parts[0][:12], "filename"
+
+    return "UNKNOWN", "fallback"
+
+
 def has_svr_predictions(ticker: str) -> bool:
     """Check if SVR predictions exist for a ticker."""
     svr_path = "analysis/reports/svr_future_predictions.csv"
@@ -294,7 +330,13 @@ def has_svr_predictions(ticker: str) -> bool:
         return False
 
 
-def run_svr_training_button(ticker: str, standard_records: list = None, category_records: list = None, user_id: str = None) -> bool:
+def run_svr_training_button(
+    ticker: str,
+    standard_records: list = None,
+    category_records: list = None,
+    user_id: str = None,
+    navigate_to_recommendations: bool = False,
+) -> bool:
     """
     Render a training button and run SVR+SHAP pipeline when clicked.
     Shows detailed progress and clear error messages.
@@ -328,10 +370,13 @@ def run_svr_training_button(ticker: str, standard_records: list = None, category
                     status_analysis.update(label="✅ Training Complete!", state="complete")
                     st.balloons()
                     st.success(f"✅ **{ticker}** trained successfully!")
-                    st.info(
-                        f"📊 Results saved to `analysis/reports/`\n\n"
-                        f"Go to **🤖 AI Recommendations** to generate insights for {ticker}"
-                    )
+                    st.info(f"📊 Results saved to `analysis/reports/`")
+
+                    if navigate_to_recommendations:
+                        st.session_state["nav_page"] = "🤖 AI Recommendations"
+                        st.session_state["preferred_ticker"] = ticker
+                        st.rerun()
+
                     return True
                 else:
                     # Detailed error display
@@ -480,14 +525,20 @@ with st.sidebar:
     st.caption(f"Logged in as `{user_email or user_id[:12]}`")
     st.divider()
 
+    nav_options = [
+        "📊 Dashboard",
+        "📤 Upload Data",
+        "🤖 AI Recommendations",
+    ]
+    current_page = st.session_state.get("nav_page", "📊 Dashboard")
+    if current_page not in nav_options:
+        current_page = "📊 Dashboard"
+
     page = st.radio(
         "Navigation",
-        [
-            "📊 Dashboard",
-            "📤 Upload Data",
-            "🤖 AI Recommendations",
-        ],
-        index=0,
+        nav_options,
+        index=nav_options.index(current_page),
+        key="nav_page",
         label_visibility="collapsed",
     )
     st.divider()
@@ -1097,29 +1148,19 @@ elif page == "📤 Upload Data":
     )
     st.write("")
 
-    col_a, col_b = st.columns([1, 1])
-    with col_a:
-        ticker_input = st.text_input(
-            "Company Ticker or Name",
-            placeholder="e.g. TSLA, NVDA, Samsung",
-            help="This becomes the ticker column in your data.",
-        )
-    with col_b:
-        uploaded_file = st.file_uploader(
-            "Financial Report File",
-            type=["csv", "xlsx", "xls", "pdf", "json"],
-            label_visibility="visible",
-        )
+    uploaded_file = st.file_uploader(
+        "Financial Report File",
+        type=["csv", "xlsx", "xls", "pdf", "json"],
+        label_visibility="visible",
+    )
 
-    if uploaded_file and ticker_input:
+    if uploaded_file:
         if st.button("Process & Load Data", type="primary", use_container_width=True):
             from etl.file_processor import process_upload
             from etl.llm_extractor import run_extraction_pipeline
             from etl.transform import transform_dynamic
-            from etl.load import store_uploaded_file
+            from etl.load import store_uploaded_file, is_duplicate_uploaded_file
             from etl.validator import validate, print_validation_report
-
-            ticker_clean = ticker_input.strip().upper()
 
             with st.status("Processing your file...", expanded=True) as status:
 
@@ -1132,6 +1173,37 @@ elif page == "📤 Upload Data":
                     st.error(f"Extraction failed: {e}")
                     status.update(label="Extraction failed", state="error")
                     st.stop()
+
+                ticker_clean, source = infer_ticker_from_upload(raw_records, uploaded_file.name)
+                st.write(f"🏷️ Detected ticker: **{ticker_clean}** (source: {source})")
+                if ticker_clean == "UNKNOWN":
+                    st.error(
+                        "Could not infer ticker from file content or filename. "
+                        "Please include a ticker/symbol column or use a clearer filename."
+                    )
+                    status.update(label="Ticker detection failed", state="error")
+                    st.stop()
+
+                # Duplicate check: same user + ticker + identical file content
+                st.write("🧠 Checking for duplicate upload...")
+                try:
+                    duplicate_exists = is_duplicate_uploaded_file(
+                        user_id=user_id,
+                        ticker=ticker_clean,
+                        raw_records=raw_records,
+                    )
+                except Exception:
+                    duplicate_exists = False
+
+                if duplicate_exists:
+                    st.warning(
+                        "Already present. Please check the recommendations. "
+                        "No duplicate upload was added."
+                    )
+                    status.update(label="Already present", state="complete")
+                    st.session_state["nav_page"] = "🤖 AI Recommendations"
+                    st.session_state["preferred_ticker"] = ticker_clean
+                    st.rerun()
 
                 # Step 2: Store raw file in uploaded_files table
                 st.write("☁️  Storing raw upload...")
@@ -1242,13 +1314,9 @@ elif page == "📤 Upload Data":
                 ticker_clean,
                 standard_records=standard_records,
                 category_records=category_records,
-                user_id=user_id
+                user_id=user_id,
+                navigate_to_recommendations=True,
             )
-
-    elif uploaded_file and not ticker_input:
-        st.warning("Please enter a ticker/company name before processing.")
-    elif not uploaded_file and ticker_input:
-        st.info("Upload a file to continue.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1284,8 +1352,13 @@ elif page == "🤖 AI Recommendations":
         )
         st.stop()
 
+    preferred_ticker = st.session_state.get("preferred_ticker")
+    default_index = 0
+    if preferred_ticker and preferred_ticker in all_tickers:
+        default_index = all_tickers.index(preferred_ticker)
+
     selected_ticker = st.selectbox(
-        "Select Ticker for Analysis", all_tickers, index=0
+        "Select Ticker for Analysis", all_tickers, index=default_index
     )
 
     # ── Check if SVR predictions exist ─────────────────────────────────────────

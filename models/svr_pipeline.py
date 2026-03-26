@@ -395,3 +395,210 @@ def run_phase4_svr(target_growth_rate=10.0, report_dir="analysis/reports"):
         "future_predictions": future_df,
         "outputs": output_paths,
     }
+
+
+def _chronological_holdout_split(X, y, dates):
+    """Fallback split for very small datasets: train on all but last row."""
+    order = pd.Series(dates).sort_values().index
+    X_sorted = X.loc[order]
+    y_sorted = y.loc[order]
+    d_sorted = pd.to_datetime(pd.Series(dates).loc[order])
+
+    if len(X_sorted) < 2:
+        raise ValueError("Need at least 2 supervised rows for holdout split")
+
+    split_idx = len(X_sorted) - 1
+    X_train = X_sorted.iloc[:split_idx]
+    X_test = X_sorted.iloc[split_idx:]
+    y_train = y_sorted.iloc[:split_idx]
+    y_test = y_sorted.iloc[split_idx:]
+    cutoff_date = d_sorted.iloc[split_idx - 1]
+
+    return X_train, X_test, y_train, y_test, cutoff_date
+
+
+def _train_svr_adaptive(X_train, y_train):
+    """Use grid search when possible, otherwise fit a compact baseline SVR."""
+    if len(X_train) >= 8 and y_train.nunique() > 1:
+        return tune_and_train_svr(X_train, y_train)
+
+    pipeline = Pipeline([
+        ("scaler", StandardScaler()),
+        ("svr", SVR(kernel="rbf", C=10, epsilon=0.1, gamma="scale")),
+    ])
+    pipeline.fit(X_train, y_train)
+
+    cv_summary = {
+        "cv_mae_mean": np.nan,
+        "cv_mae_std": np.nan,
+        "cv_rmse_mean": np.nan,
+        "cv_rmse_std": np.nan,
+        "cv_r2_mean": np.nan,
+        "cv_r2_std": np.nan,
+        "best_params": {
+            "svr__kernel": "rbf",
+            "svr__C": 10,
+            "svr__epsilon": 0.1,
+            "svr__gamma": "scale",
+            "mode": "baseline_small_dataset",
+        },
+    }
+    return pipeline, cv_summary
+
+
+def run_phase4_svr_for_ticker(
+    ticker,
+    standard_df,
+    target_growth_rate=10.0,
+    report_dir="analysis/reports",
+):
+    """Train Phase 4 SVR for one uploaded ticker and update shared report files."""
+    if standard_df is None or len(standard_df) == 0:
+        raise ValueError(f"No training data provided for {ticker}")
+
+    df = standard_df.copy()
+    if "ticker" in df.columns:
+        df = df[df["ticker"].astype(str).str.upper() == str(ticker).upper()].copy()
+
+    if len(df) == 0:
+        raise ValueError(f"No rows found for ticker {ticker}")
+
+    if "date" in df.columns:
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df = df.dropna(subset=["date"])
+
+    data = build_supervised_dataset(df, target_col="net_income", horizon=1)
+    X, y = data["X"], data["y"]
+    dates = pd.to_datetime(data["model_df"]["date"], errors="coerce")
+
+    if len(X) < 2:
+        # Not enough rows to fit SVR; produce a deterministic fallback from
+        # observed growth so recommendations remain ticker-specific.
+        observed_growth = float(y.iloc[0]) if len(y) == 1 else 0.0
+        confidence_sigma = max(1.0, abs(observed_growth) * 0.2)
+
+        future_df = data["future_rows"][["ticker", "date", "net_income"]].copy()
+        future_df = future_df[
+            future_df["ticker"].astype(str).str.upper() == str(ticker).upper()
+        ].copy()
+        if future_df.empty:
+            raise ValueError(f"Could not generate future prediction row for {ticker}")
+
+        future_df["current_net_income"] = future_df["net_income"]
+        future_df["predicted_growth_rate"] = observed_growth
+        future_df["target_growth_rate"] = target_growth_rate
+        future_df["gap_vs_target"] = observed_growth - target_growth_rate
+        future_df["gap_status"] = np.where(
+            future_df["gap_vs_target"] >= 0, "surplus", "shortfall"
+        )
+        future_df["confidence_lower_95"] = observed_growth - 1.96 * confidence_sigma
+        future_df["confidence_upper_95"] = observed_growth + 1.96 * confidence_sigma
+        future_df["predicted_next_net_income"] = future_df["current_net_income"] * (1 + observed_growth / 100)
+        future_df["target_next_net_income"] = future_df["current_net_income"] * (1 + target_growth_rate / 100)
+
+        os.makedirs(report_dir, exist_ok=True)
+        future_path = os.path.join(report_dir, "svr_future_predictions.csv")
+        if os.path.exists(future_path):
+            existing = pd.read_csv(future_path)
+            if "ticker" in existing.columns:
+                existing = existing[
+                    existing["ticker"].astype(str).str.upper() != str(ticker).upper()
+                ]
+            merged = pd.concat([existing, future_df], ignore_index=True)
+        else:
+            merged = future_df
+        merged.to_csv(future_path, index=False)
+
+        metrics_path = os.path.join(report_dir, "svr_evaluation_metrics.csv")
+        pd.DataFrame([
+            {
+                "mae": np.nan,
+                "rmse": np.nan,
+                "r2": np.nan,
+                "residual_mean": np.nan,
+                "residual_std": np.nan,
+                "residual_min": np.nan,
+                "residual_max": np.nan,
+                "test_size": 0,
+            }
+        ]).to_csv(metrics_path, index=False)
+
+        return {
+            "ticker": ticker,
+            "future_path": future_path,
+            "metrics_path": metrics_path,
+            "test_metrics": {
+                "mae": np.nan,
+                "rmse": np.nan,
+                "r2": np.nan,
+                "test_size": 0,
+            },
+            "cv_summary": {"best_params": {"mode": "fallback_single_sample"}},
+            "cutoff_date": str(pd.to_datetime(data["future_rows"]["date"]).max().date()),
+        }
+
+    unique_dates = sorted(pd.Series(dates).dropna().unique())
+    if len(unique_dates) >= 4:
+        X_train, X_test, y_train, y_test, cutoff = time_aware_split(X, y, dates, test_ratio=0.2)
+    else:
+        X_train, X_test, y_train, y_test, cutoff = _chronological_holdout_split(X, y, dates)
+
+    model, cv_summary = _train_svr_adaptive(X_train, y_train)
+
+    preds = model.predict(X_test)
+    residuals = y_test.values - preds
+    residual_std = float(np.std(residuals)) if len(residuals) else 0.0
+
+    test_metrics = {
+        "mae": float(mean_absolute_error(y_test, preds)),
+        "rmse": float(np.sqrt(mean_squared_error(y_test, preds))),
+        "r2": float(r2_score(y_test, preds)) if len(y_test) > 1 else np.nan,
+        "residual_mean": float(np.mean(residuals)),
+        "residual_std": residual_std,
+        "residual_min": float(np.min(residuals)),
+        "residual_max": float(np.max(residuals)),
+        "test_size": int(len(y_test)),
+    }
+
+    confidence_sigma = residual_std if residual_std > 0 else 1.0
+    future_df = predict_future_and_gaps(
+        model=model,
+        future_rows=data["future_rows"],
+        future_X=data["future_X"],
+        confidence_sigma=confidence_sigma,
+        target_growth_rate=target_growth_rate,
+    )
+
+    future_df = future_df[
+        future_df["ticker"].astype(str).str.upper() == str(ticker).upper()
+    ].copy()
+
+    if future_df.empty:
+        raise ValueError(f"Could not generate future prediction row for {ticker}")
+
+    os.makedirs(report_dir, exist_ok=True)
+    future_path = os.path.join(report_dir, "svr_future_predictions.csv")
+
+    if os.path.exists(future_path):
+        existing = pd.read_csv(future_path)
+        if "ticker" in existing.columns:
+            existing = existing[
+                existing["ticker"].astype(str).str.upper() != str(ticker).upper()
+            ]
+        merged = pd.concat([existing, future_df], ignore_index=True)
+    else:
+        merged = future_df
+
+    merged.to_csv(future_path, index=False)
+
+    metrics_path = os.path.join(report_dir, "svr_evaluation_metrics.csv")
+    pd.DataFrame([test_metrics]).to_csv(metrics_path, index=False)
+
+    return {
+        "ticker": ticker,
+        "future_path": future_path,
+        "metrics_path": metrics_path,
+        "test_metrics": test_metrics,
+        "cv_summary": cv_summary,
+        "cutoff_date": str(pd.to_datetime(cutoff).date()),
+    }

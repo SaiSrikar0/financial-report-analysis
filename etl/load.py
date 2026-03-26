@@ -1,6 +1,8 @@
 """ETL load layer for Supabase/PostgreSQL."""
 
 import os
+import hashlib
+import json
 
 import numpy as np
 import pandas as pd
@@ -99,6 +101,48 @@ def store_uploaded_file(
     """
     if not user_id or user_id == "predefined":
         print(f"[store_uploaded_file] ✗ CRITICAL: Invalid user_id: '{user_id}'. User must be authenticated.")
+        return False
+
+
+def _stable_records_hash(raw_records: list) -> str:
+    """Compute deterministic hash for JSON-like record list."""
+    payload = json.dumps(raw_records or [], sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def is_duplicate_uploaded_file(
+    user_id: str,
+    ticker: str,
+    raw_records: list,
+) -> bool:
+    """
+    Check if same user already uploaded the same ticker with identical content.
+    """
+    if not user_id or not ticker or raw_records is None:
+        return False
+
+    target_hash = _stable_records_hash(raw_records)
+
+    try:
+        admin_client = get_supabase_admin_client()
+        response = (
+            admin_client.table("uploaded_files")
+            .select("id,file_content")
+            .eq("user_id", user_id)
+            .eq("ticker", str(ticker).upper())
+            .limit(200)
+            .execute()
+        )
+
+        rows = response.data if response and response.data else []
+        for row in rows:
+            existing_hash = _stable_records_hash(row.get("file_content") or [])
+            if existing_hash == target_hash:
+                return True
+        return False
+    except Exception as e:
+        print(f"[is_duplicate_uploaded_file] Warning: {type(e).__name__}: {e}")
+        # Fail-open to avoid blocking uploads on transient DB errors.
         return False
     
     if not raw_records:
@@ -249,6 +293,69 @@ def load_user_data(
         print(f"[load_user_data] ✗ category_table error: {e}")
 
     return len(errors) == 0
+
+
+def delete_user_uploaded_data(
+    user_id: str,
+    ticker: str,
+    uploaded_file_id: str | int | None = None,
+) -> dict:
+    """
+    Delete uploaded data for a user/ticker.
+
+    Behavior:
+    - If uploaded_file_id is provided, delete that specific row from uploaded_files.
+    - Always delete user-scoped derived rows for the ticker from standard_table,
+      category_table, and recommendation_results.
+
+    Returns a summary dict with success flag and per-table counts (best effort).
+    """
+    if not user_id or user_id == "predefined":
+        return {"success": False, "error": f"Invalid user_id: {user_id}"}
+    if not ticker:
+        return {"success": False, "error": "Missing ticker"}
+
+    admin_client = get_supabase_admin_client()
+    ticker_upper = str(ticker).upper()
+
+    result = {
+        "success": True,
+        "deleted": {
+            "uploaded_files": 0,
+            "standard_table": 0,
+            "category_table": 0,
+            "recommendation_results": 0,
+        },
+        "errors": [],
+    }
+
+    try:
+        q = admin_client.table("uploaded_files").delete().eq("user_id", user_id)
+        if uploaded_file_id is not None:
+            q = q.eq("id", uploaded_file_id)
+        else:
+            q = q.eq("ticker", ticker_upper)
+        resp = q.execute()
+        result["deleted"]["uploaded_files"] = len(resp.data) if resp and resp.data else 0
+    except Exception as e:
+        result["success"] = False
+        result["errors"].append(f"uploaded_files: {e}")
+
+    for table_name in ["standard_table", "category_table", "recommendation_results"]:
+        try:
+            resp = (
+                admin_client.table(table_name)
+                .delete()
+                .eq("user_id", user_id)
+                .eq("ticker", ticker_upper)
+                .execute()
+            )
+            result["deleted"][table_name] = len(resp.data) if resp and resp.data else 0
+        except Exception as e:
+            result["success"] = False
+            result["errors"].append(f"{table_name}: {e}")
+
+    return result
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ Handles JSON stored data and ensures all required SVR parameters are present.
 import pandas as pd
 import numpy as np
 import json
+import re
 from typing import Tuple, Optional
 import streamlit as st
 
@@ -32,6 +33,66 @@ OPTIONAL_SVR_FIELDS = [
 ]
 
 
+def _coerce_numeric_series(series: pd.Series) -> pd.Series:
+    """
+    Robust numeric coercion for messy financial uploads.
+    Handles: $1,234, (123), 12%, 1.2B, 450M, 23K, textual separators.
+    """
+    if series.dtype.kind in "biufc":
+        return pd.to_numeric(series, errors="coerce")
+
+    s = series.astype(str).str.strip()
+    s = s.replace({"": np.nan, "nan": np.nan, "none": np.nan, "null": np.nan}, regex=False)
+
+    # (1234) -> -1234
+    s = s.str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+    # Remove currency symbols, commas and whitespace inside numbers
+    s = s.str.replace(r"[,$€£₹\s]", "", regex=True)
+
+    # Preserve percentage as numeric value (e.g., 12% -> 12)
+    s = s.str.replace("%", "", regex=False)
+
+    multipliers = pd.Series(1.0, index=s.index)
+    suffix_map = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}
+    suffix = s.str.extract(r"([KMBTkmbt])$", expand=False).str.upper()
+    for key, mult in suffix_map.items():
+        multipliers = multipliers.where(suffix != key, mult)
+
+    s = s.str.replace(r"[KMBTkmbt]$", "", regex=True)
+    num = pd.to_numeric(s, errors="coerce")
+    return num * multipliers
+
+
+def _coerce_date_series(series: pd.Series) -> pd.Series:
+    """Parse common date variants, including year-only and quarter formats."""
+    s = series.astype(str).str.strip()
+
+    # Quarter formats: 2024Q1, Q1-2024, 2024-Q1
+    q1 = s.str.extract(r"^(\d{4})[-\s]?Q([1-4])$", expand=True)
+    q2 = s.str.extract(r"^Q([1-4])[-\s]?(\d{4})$", expand=True)
+
+    quarter_map = {"1": "03-31", "2": "06-30", "3": "09-30", "4": "12-31"}
+    out = pd.to_datetime(s, errors="coerce")
+
+    q1_mask = q1[0].notna() & q1[1].notna() & out.isna()
+    if q1_mask.any():
+        q_dates = q1.loc[q1_mask].apply(lambda r: f"{r[0]}-{quarter_map.get(r[1], '12-31')}", axis=1)
+        out.loc[q1_mask] = pd.to_datetime(q_dates, errors="coerce")
+
+    q2_mask = q2[0].notna() & q2[1].notna() & out.isna()
+    if q2_mask.any():
+        q_dates = q2.loc[q2_mask].apply(lambda r: f"{r[1]}-{quarter_map.get(r[0], '12-31')}", axis=1)
+        out.loc[q2_mask] = pd.to_datetime(q_dates, errors="coerce")
+
+    # Year-only: 2024 -> 2024-12-31
+    year_only = s.str.extract(r"^(\d{4})$", expand=False)
+    y_mask = year_only.notna() & out.isna()
+    if y_mask.any():
+        out.loc[y_mask] = pd.to_datetime(year_only.loc[y_mask] + "-12-31", errors="coerce")
+
+    return out
+
+
 def _normalize_raw_data_fields(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """
     Normalize field names in raw uploaded data to match standard schema.
@@ -51,19 +112,22 @@ def _normalize_raw_data_fields(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     print(f"[_normalize_raw_data_fields] ✓ Input columns: {normalized.columns.tolist()}")
     
     # Lowercase all columns for case-insensitive matching
-    normalized.columns = [col.lower().strip() for col in normalized.columns]
+    normalized.columns = [
+        re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", col.lower().strip())).strip("_")
+        for col in normalized.columns
+    ]
     
     # Map common field name variations to standard names
     field_mappings = {
         # Date field
-        'date': ['date', 'period', 'fiscal_date', 'report_date', 'year', 'quarter'],
-        'ticker': ['ticker', 'symbol', 'company', 'company_name'],
-        'revenue': ['revenue', 'total_revenue', 'sales', 'net_sales', 'operating_revenue'],
-        'net_income': ['net_income', 'income', 'earnings', 'net_profit', 'ni'],
-        'operating_income': ['operating_income', 'operating_profit', 'ebit', 'operating_earnings'],
-        'total_assets': ['total_assets', 'assets', 'total_asset'],
-        'total_liabilities': ['total_liabilities', 'liabilities', 'total_liability'],
-        'operating_cashflow': ['operating_cashflow', 'operating_cash_flow', 'cash_from_operations', 'ocf'],
+        'date': ['date', 'period', 'fiscal_date', 'report_date', 'year', 'quarter', 'fiscal_year'],
+        'ticker': ['ticker', 'symbol', 'company', 'company_name', 'stock', 'stock_symbol'],
+        'revenue': ['revenue', 'total_revenue', 'sales', 'net_sales', 'operating_revenue', 'turnover'],
+        'net_income': ['net_income', 'income', 'earnings', 'net_profit', 'ni', 'profit_after_tax', 'pat'],
+        'operating_income': ['operating_income', 'operating_profit', 'ebit', 'operating_earnings', 'op_income'],
+        'total_assets': ['total_assets', 'assets', 'total_asset', 'asset_total'],
+        'total_liabilities': ['total_liabilities', 'liabilities', 'total_liability', 'liability_total'],
+        'operating_cashflow': ['operating_cashflow', 'operating_cash_flow', 'cash_from_operations', 'ocf', 'cashflow_from_operations'],
     }
     
     for target_field, source_variants in field_mappings.items():
@@ -102,14 +166,14 @@ def _normalize_raw_data_fields(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     
     # Ensure date is datetime
     if 'date' in normalized.columns:
-        normalized['date'] = pd.to_datetime(normalized['date'], errors='coerce')
+        normalized['date'] = _coerce_date_series(normalized['date'])
     
     # Convert numeric fields
     numeric_fields = ['revenue', 'net_income', 'operating_income', 'total_assets', 
                      'total_liabilities', 'operating_cashflow']
     for field in numeric_fields:
         if field in normalized.columns:
-            normalized[field] = pd.to_numeric(normalized[field], errors='coerce')
+            normalized[field] = _coerce_numeric_series(normalized[field])
     
     print(f"[_normalize_raw_data_fields] ✓ Output shape: {normalized.shape}")
     print(f"[_normalize_raw_data_fields] ✓ Output columns: {normalized.columns.tolist()}")
@@ -191,10 +255,17 @@ def retrieve_uploaded_data_by_ticker(
     try:
         response = supabase_client.table("uploaded_files").select(
             "file_content, ticker"
-        ).eq("ticker", ticker.upper()).limit(1).execute()
+        ).eq("user_id", user_id).limit(100).execute()
         
+        matched_rows = []
         if response.data and len(response.data) > 0:
-            file_content = response.data[0].get("file_content", [])
+            matched_rows = [
+                r for r in response.data
+                if str(r.get("ticker", "")).upper() == ticker.upper()
+            ]
+
+        if matched_rows:
+            file_content = matched_rows[0].get("file_content", [])
             if isinstance(file_content, list) and len(file_content) > 0:
                 df = pd.DataFrame(file_content)
                 # Step 1: Normalize field names in raw data
@@ -229,7 +300,7 @@ def retrieve_uploaded_data_by_ticker(
 def validate_and_prepare_svr_data(
     df: pd.DataFrame,
     ticker: str,
-    min_records: int = 3
+    min_records: int = 2
 ) -> Tuple[pd.DataFrame, list]:
     """
     Validate that data has all required fields for SVR training.
@@ -266,14 +337,26 @@ def validate_and_prepare_svr_data(
     
     # Convert date to datetime
     if "date" in work_df.columns:
-        work_df["date"] = pd.to_datetime(work_df["date"], errors="coerce")
+        work_df["date"] = _coerce_date_series(work_df["date"])
         work_df = work_df.dropna(subset=["date"])
     
-    # Convert numeric fields
-    numeric_fields = REQUIRED_SVR_FIELDS + OPTIONAL_SVR_FIELDS
+    # Convert numeric financial fields only (never coerce ticker/date to numeric)
+    numeric_fields = [
+        "revenue",
+        "net_income",
+        "operating_income",
+        "total_assets",
+        "total_liabilities",
+        "operating_cashflow",
+    ] + OPTIONAL_SVR_FIELDS
+
     for field in numeric_fields:
         if field in work_df.columns:
-            work_df[field] = pd.to_numeric(work_df[field], errors="coerce")
+            work_df[field] = _coerce_numeric_series(work_df[field])
+
+    # Ensure ticker strings are preserved/normalized
+    if "ticker" in work_df.columns:
+        work_df["ticker"] = work_df["ticker"].astype(str).str.strip().replace({"": np.nan, "nan": np.nan})
     
     # Remove rows with NaN in required fields
     for field in REQUIRED_SVR_FIELDS:
@@ -347,6 +430,10 @@ def load_and_validate_training_data(
     if standard_records and len(standard_records) > 0:
         all_messages.append("ℹ️ Using provided uploaded records")
         df = pd.DataFrame(standard_records)
+        if "ticker" not in df.columns:
+            df["ticker"] = ticker
+        else:
+            df["ticker"] = df["ticker"].fillna(ticker)
     else:
         # Otherwise retrieve from database
         all_messages.append("→ Retrieving from database...")
@@ -369,8 +456,8 @@ def load_and_validate_training_data(
         return None, all_messages
     
     # Final checks
-    if len(prepared_df) < 3:
-        all_messages.append("❌ CRITICAL: Insufficient data for model training")
+    if len(prepared_df) < 2:
+        all_messages.append("❌ CRITICAL: Insufficient data for model training (need at least 2 periods)")
         return None, all_messages
     
     all_messages.append(f"✅ Data Ready: {len(prepared_df)} records with all required fields")

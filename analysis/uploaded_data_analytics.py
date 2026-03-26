@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 from analysis.data_connection import get_supabase_client
+from etl.load import delete_user_uploaded_data
 
 
 def get_user_uploaded_files(user_id: str) -> list:
@@ -78,7 +79,65 @@ def display_uploaded_files_section(user_id: str):
     
     selected_file = uploaded_files[selected_idx]
     ticker = selected_file["ticker"]
+    file_id = selected_file.get("id")
     raw_content = selected_file.get("file_content", [])
+
+    st.markdown("<div class='panel'>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='section-title'>Manage Uploaded Data</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.caption(
+        "Delete the selected upload and its related ticker data "
+        "(standard/category/recommendation records for your user)."
+    )
+
+    confirm_delete = st.checkbox(
+        f"Confirm delete for {ticker} ({selected_file.get('filename', 'file')})",
+        key=f"confirm_delete_{file_id}_{ticker}",
+    )
+    delete_btn = st.button(
+        "🗑️ Delete Selected Upload",
+        type="secondary",
+        use_container_width=False,
+        key=f"delete_upload_{file_id}_{ticker}",
+    )
+
+    if delete_btn:
+        if not confirm_delete:
+            st.warning("Tick the confirmation box before deleting data.")
+        else:
+            with st.spinner("Deleting uploaded data..."):
+                delete_result = delete_user_uploaded_data(
+                    user_id=user_id,
+                    ticker=ticker,
+                    uploaded_file_id=file_id,
+                )
+
+            if delete_result.get("success"):
+                counts = delete_result.get("deleted", {})
+                st.success(
+                    "Deleted successfully: "
+                    f"uploaded_files={counts.get('uploaded_files', 0)}, "
+                    f"standard_table={counts.get('standard_table', 0)}, "
+                    f"category_table={counts.get('category_table', 0)}, "
+                    f"recommendation_results={counts.get('recommendation_results', 0)}"
+                )
+
+                if (
+                    st.session_state.get("rec_ticker", "").upper() == str(ticker).upper()
+                ):
+                    st.session_state.pop("recommendations", None)
+                    st.session_state.pop("rec_ticker", None)
+
+                st.rerun()
+            else:
+                st.error("Delete failed. See details below.")
+                for err in delete_result.get("errors", []):
+                    st.error(f"- {err}")
+
+    st.markdown("</div>", unsafe_allow_html=True)
     
     if not raw_content:
         st.warning("No data in this file.")
