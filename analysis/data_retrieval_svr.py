@@ -1,18 +1,12 @@
 """
 Data retrieval and validation for uploaded data analysis.
 Handles JSON stored data and ensures all required SVR parameters are present.
-
-ENHANCED WITH:
-- Comprehensive debug logging at each step
-- Smart numeric conversion (handles $1,000, 1M, 1B formats)
-- Robust ticker assignment ensuring no NULL values persist
-- Print actual DataFrame structure for troubleshooting
-- Detailed field-by-field validation reporting
 """
 
 import pandas as pd
 import numpy as np
 import json
+import re
 from typing import Tuple, Optional
 import streamlit as st
 
@@ -39,60 +33,64 @@ OPTIONAL_SVR_FIELDS = [
 ]
 
 
-def _convert_numeric_field(value, field_name: str = "unknown") -> float:
+def _coerce_numeric_series(series: pd.Series) -> pd.Series:
     """
-    Convert various numeric formats to float.
-    Handles: "1000", "$1,000", "1M", "1.5B", etc.
-    
-    Args:
-        value: Value to convert (string, int, float, etc.)
-        field_name: Field name for logging
-        
-    Returns:
-        Float value or np.nan if conversion fails
+    Robust numeric coercion for messy financial uploads.
+    Handles: $1,234, (123), 12%, 1.2B, 450M, 23K, textual separators.
     """
-    if pd.isna(value) or value is None or value == '':
-        return np.nan
-    
-    try:
-        # Already a number
-        if isinstance(value, (int, float)):
-            return float(value)
-        
-        # String conversion
-        s = str(value).strip()
-        
-        # Remove currency symbols
-        s = s.replace('$', '').replace('€', '').replace('£', '')
-        
-        # Handle millions (M)
-        if 'M' in s.upper():
-            num_str = s.replace('M', '').replace('m', '').strip()
-            return float(num_str) * 1_000_000
-        
-        # Handle billions (B)
-        if 'B' in s.upper():
-            num_str = s.replace('B', '').replace('b', '').strip()
-            return float(num_str) * 1_000_000_000
-        
-        # Handle thousands (K)
-        if 'K' in s.upper():
-            num_str = s.replace('K', '').replace('k', '').strip()
-            return float(num_str) * 1_000
-        
-        # Remove commas and spaces
-        s = s.replace(',', '').replace(' ', '')
-        
-        # Handle percentage
-        if '%' in s:
-            s = s.replace('%', '').strip()
-            return float(s) / 100
-        
-        # Try direct conversion
-        return float(s)
-    except (ValueError, TypeError) as e:
-        # Silently return NaN for conversion errors (common for missing data)
-        return np.nan
+    if series.dtype.kind in "biufc":
+        return pd.to_numeric(series, errors="coerce")
+
+    s = series.astype(str).str.strip()
+    s = s.replace({"": np.nan, "nan": np.nan, "none": np.nan, "null": np.nan}, regex=False)
+
+    # (1234) -> -1234
+    s = s.str.replace(r"^\((.*)\)$", r"-\1", regex=True)
+    # Remove currency symbols, commas and whitespace inside numbers
+    s = s.str.replace(r"[,$€£₹\s]", "", regex=True)
+
+    # Preserve percentage as numeric value (e.g., 12% -> 12)
+    s = s.str.replace("%", "", regex=False)
+
+    multipliers = pd.Series(1.0, index=s.index)
+    suffix_map = {"K": 1e3, "M": 1e6, "B": 1e9, "T": 1e12}
+    suffix = s.str.extract(r"([KMBTkmbt])$", expand=False).str.upper()
+    for key, mult in suffix_map.items():
+        multipliers = multipliers.where(suffix != key, mult)
+
+    s = s.str.replace(r"[KMBTkmbt]$", "", regex=True)
+    num = pd.to_numeric(s, errors="coerce")
+    return num * multipliers
+
+
+def _coerce_date_series(series: pd.Series) -> pd.Series:
+    """Parse common date variants, including year-only and quarter formats."""
+    s = series.astype(str).str.strip()
+
+    # Quarter formats: 2024Q1, Q1-2024, 2024-Q1
+    q1 = s.str.extract(r"^(\d{4})[-\s]?Q([1-4])$", expand=True)
+    q2 = s.str.extract(r"^Q([1-4])[-\s]?(\d{4})$", expand=True)
+
+    quarter_map = {"1": "03-31", "2": "06-30", "3": "09-30", "4": "12-31"}
+    out = pd.to_datetime(s, errors="coerce")
+
+    q1_mask = q1[0].notna() & q1[1].notna() & out.isna()
+    if q1_mask.any():
+        q_dates = q1.loc[q1_mask].apply(lambda r: f"{r[0]}-{quarter_map.get(r[1], '12-31')}", axis=1)
+        out.loc[q1_mask] = pd.to_datetime(q_dates, errors="coerce")
+
+    q2_mask = q2[0].notna() & q2[1].notna() & out.isna()
+    if q2_mask.any():
+        q_dates = q2.loc[q2_mask].apply(lambda r: f"{r[1]}-{quarter_map.get(r[0], '12-31')}", axis=1)
+        out.loc[q2_mask] = pd.to_datetime(q_dates, errors="coerce")
+
+    # Year-only: 2024 -> 2024-12-31
+    year_only = s.str.extract(r"^(\d{4})$", expand=False)
+    y_mask = year_only.notna() & out.isna()
+    if y_mask.any():
+        out.loc[y_mask] = pd.to_datetime(year_only.loc[y_mask] + "-12-31", errors="coerce")
+
+    return out
 
 
 def _normalize_raw_data_fields(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
@@ -100,9 +98,6 @@ def _normalize_raw_data_fields(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     Normalize field names in raw uploaded data to match standard schema.
     Handles common variations: Revenue, REVENUE, revenue_total, revenue_sales, etc.
     Also ensures ticker and date fields exist and have valid values.
-    
-    ENHANCED: Added comprehensive debug logging, smart numeric conversion, 
-    robust ticker fixing.
     
     Args:
         df: Raw DataFrame from uploaded file
@@ -113,166 +108,75 @@ def _normalize_raw_data_fields(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
     """
     normalized = df.copy()
     
-    print(f"\n{'='*70}")
-    print(f"FUNCTION: _normalize_raw_data_fields(ticker={ticker})")
-    print(f"{'='*70}")
-    
-    print(f"\n[INPUT DEBUG INFO]")
-    print(f"  Shape: {normalized.shape}")
-    print(f"  Columns: {normalized.columns.tolist()}")
-    print(f"  Data types: {normalized.dtypes.to_dict()}")
-    null_summary = normalized.isnull().sum()
-    if null_summary.any():
-        print(f"  Null counts:")
-        for col, count in null_summary[null_summary > 0].items():
-            print(f"    - {col}: {count}")
-    
-    if len(normalized) > 0:
-        print(f"\n  FIRST ROW DATA (RAW):")
-        for col in normalized.columns[:5]:  # Show first 5 columns
-            val = normalized.iloc[0][col]
-            print(f"    {col}: {repr(val)} (type: {type(val).__name__})")
+    print(f"[_normalize_raw_data_fields] ✓ Input shape: {normalized.shape}")
+    print(f"[_normalize_raw_data_fields] ✓ Input columns: {normalized.columns.tolist()}")
     
     # Lowercase all columns for case-insensitive matching
-    normalized.columns = [col.lower().strip() for col in normalized.columns]
-    print(f"\n[NORMALIZED COLUMNS (lowercase)]")
-    print(f"  {normalized.columns.tolist()}")
+    normalized.columns = [
+        re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", col.lower().strip())).strip("_")
+        for col in normalized.columns
+    ]
     
     # Map common field name variations to standard names
     field_mappings = {
         # Date field
-        'date': ['date', 'period', 'fiscal_date', 'report_date', 'year', 'quarter', 'month'],
-        'ticker': ['ticker', 'symbol', 'company', 'company_name', 'stock_symbol'],
-        'revenue': ['revenue', 'total_revenue', 'sales', 'net_sales', 'operating_revenue', 'revenues'],
-        'net_income': ['net_income', 'income', 'earnings', 'net_profit', 'ni', 'net_earnings'],
-        'operating_income': ['operating_income', 'operating_profit', 'ebit', 'operating_earnings', 'operating_income_loss'],
-        'total_assets': ['total_assets', 'assets', 'total_asset', 'assets_total'],
-        'total_liabilities': ['total_liabilities', 'liabilities', 'total_liability', 'liabilities_total'],
-        'operating_cashflow': ['operating_cashflow', 'operating_cash_flow', 'cash_from_operations', 'ocf', 'cash_flow_operations'],
+        'date': ['date', 'period', 'fiscal_date', 'report_date', 'year', 'quarter', 'fiscal_year'],
+        'ticker': ['ticker', 'symbol', 'company', 'company_name', 'stock', 'stock_symbol'],
+        'revenue': ['revenue', 'total_revenue', 'sales', 'net_sales', 'operating_revenue', 'turnover'],
+        'net_income': ['net_income', 'income', 'earnings', 'net_profit', 'ni', 'profit_after_tax', 'pat'],
+        'operating_income': ['operating_income', 'operating_profit', 'ebit', 'operating_earnings', 'op_income'],
+        'total_assets': ['total_assets', 'assets', 'total_asset', 'asset_total'],
+        'total_liabilities': ['total_liabilities', 'liabilities', 'total_liability', 'liability_total'],
+        'operating_cashflow': ['operating_cashflow', 'operating_cash_flow', 'cash_from_operations', 'ocf', 'cashflow_from_operations'],
     }
     
-    print(f"\n[FIELD NAME MAPPINGS]")
-    mapped_count = 0
     for target_field, source_variants in field_mappings.items():
         if target_field not in normalized.columns:
             for variant in source_variants:
                 if variant in normalized.columns:
                     normalized = normalized.rename(columns={variant: target_field})
-                    print(f"  ✓ '{variant}' → '{target_field}'")
-                    mapped_count += 1
+                    print(f"[_normalize_raw_data_fields] → Mapped '{variant}' → '{target_field}'")
                     break
-            else:
-                print(f"  ✗ {target_field}: NOT FOUND in input data")
-        else:
-            print(f"  - {target_field}: already present")
-    
-    print(f"\n[TICKER ASSIGNMENT] (Critical step)")
-    
-    # Debug: Show current ticker state
-    if 'ticker' in normalized.columns:
-        ticker_col = normalized['ticker']
-        null_count = ticker_col.isna().sum()
-        empty_str_count = (ticker_col == '').sum()
-        null_or_empty = null_count + empty_str_count
-        
-        print(f"  Ticker column EXISTS")
-        print(f"    - Total rows: {len(normalized)}") 
-        print(f"    - NULL values: {null_count}")
-        print(f"    - Empty strings: {empty_str_count}")
-        print(f"    - NULL or empty: {null_or_empty}")
-        print(f"    - Valid tickers: {len(normalized) - null_or_empty}")
-        
-        if null_or_empty > 0:
-            print(f"    - Unique values: {ticker_col.unique()[:5].tolist()}")
-    else:
-        print(f"  Ticker column DOES NOT EXIST - will create")
     
     # CRITICAL: Ensure every single row has a valid ticker
-    # Strategy 1: If column doesn't exist, create it
+    # First check if ticker column exists
     if 'ticker' not in normalized.columns:
-        print(f"\n[ACTION] Creating new ticker column")
+        print(f"[_normalize_raw_data_fields] ⚠️ Ticker column not found - creating from parameter: {ticker}")
         normalized.insert(0, 'ticker', ticker)
-        print(f"  ✓ Created 'ticker' column, all rows set to: {ticker}")
     else:
-        # Strategy 2: Column exists, fix any NULL/empty values
-        ticker_col_before = normalized['ticker'].copy()
-        null_before = ticker_col_before.isna().sum()
-        empty_before = (ticker_col_before == '').sum()
+        # Column exists - fill ANY null values
+        null_count = normalized['ticker'].isna().sum()
+        if null_count > 0:
+            print(f"[_normalize_raw_data_fields] ⚠️ Found {null_count} NULL tickers - filling from parameter: {ticker}")
+            normalized['ticker'] = normalized['ticker'].fillna(ticker)
         
-        if null_before > 0:
-            print(f"\n[ACTION] Filling {null_before} NULL ticker values")
-            normalized.loc[normalized['ticker'].isna(), 'ticker'] = ticker
-            print(f"  ✓ Filled {null_before} NULL values with: {ticker}")
-        
-        if (normalized['ticker'] == '').sum() > 0:
-            empty_count = (normalized['ticker'] == '').sum()
-            print(f"\n[ACTION] Fixing {empty_count} empty string ticker values")
+        # Also check for empty strings
+        if (normalized['ticker'] == '').any():
+            print(f"[_normalize_raw_data_fields] ⚠️ Found empty string tickers - replacing with: {ticker}")
             normalized.loc[normalized['ticker'] == '', 'ticker'] = ticker
-            print(f"  ✓ Replaced {empty_count} empty strings with: {ticker}")
     
-    # ABSOLUTE FINAL CHECK: Force all to have ticker
+    # Final verification
     null_after = normalized['ticker'].isna().sum()
-    empty_after = (normalized['ticker'] == '').sum()
-    
-    if null_after > 0 or empty_after > 0:
-        print(f"\n[EMERGENCY] Still found {null_after} NULL + {empty_after} empty tickers - FORCING ALL")
+    if null_after > 0:
+        print(f"[_normalize_raw_data_fields] ✗ CRITICAL: Still have {null_after} NULL tickers after filling!")
+        print(f"[_normalize_raw_data_fields] ✗ Setting all tickers to: {ticker}")
         normalized['ticker'] = ticker
-        print(f"  ✓ Force-set all {len(normalized)} rows to: {ticker}")
-    
-    verify_ticker_valid = normalized['ticker'].unique().tolist()
-    print(f"\n[VERIFICATION] Final ticker values in DataFrame: {verify_ticker_valid}")
-    print(f"  ✓ All {len(normalized)} rows have valid ticker")
-    
-    # Convert date to datetime
-    print(f"\n[DATE CONVERSION]")
-    if 'date' in normalized.columns:
-        date_before = normalized['date'].isna().sum()
-        normalized['date'] = pd.to_datetime(normalized['date'], errors='coerce')
-        date_after = normalized['date'].isna().sum()
-        print(f"  ✓ Converted date column ({date_after} NULLs after conversion)")
     else:
-        print(f"  ✗ Date column not found - will be NaN")
-        normalized['date'] = pd.NaT
+        print(f"[_normalize_raw_data_fields] ✓ All {len(normalized)} rows have valid ticker: {ticker}")
     
-    # Convert numeric fields with smart conversion
-    print(f"\n[NUMERIC FIELD CONVERSION] (using smart converter)")
+    # Ensure date is datetime
+    if 'date' in normalized.columns:
+        normalized['date'] = _coerce_date_series(normalized['date'])
+    
+    # Convert numeric fields
     numeric_fields = ['revenue', 'net_income', 'operating_income', 'total_assets', 
                      'total_liabilities', 'operating_cashflow']
-    
     for field in numeric_fields:
-        if field not in normalized.columns:
-            print(f"  ✗ {field}: MISSING - creating empty column (will be NaN)")
-            normalized[field] = np.nan
-        else:
-            before_null = normalized[field].isna().sum()
-            # Apply smart converter
-            normalized[field] = normalized[field].apply(
-                lambda x: _convert_numeric_field(x, field_name=field)
-            )
-            after_null = normalized[field].isna().sum()
-            valid_count = len(normalized) - after_null
-            print(f"  ✓ {field}: {valid_count} valid values, {after_null} NULL")
+        if field in normalized.columns:
+            normalized[field] = _coerce_numeric_series(normalized[field])
     
-    # Final report
-    print(f"\n[NORMALIZATION OUTPUT SUMMARY]")
-    print(f"  Shape: {normalized.shape}")
-    print(f"  Columns: {normalized.columns.tolist()}")
-    print(f"\n  NULL COUNT BY COLUMN:")
-    for col in normalized.columns:
-        null_count = normalized[col].isna().sum()
-        pct = 100 * null_count / len(normalized) if len(normalized) > 0 else 0
-        status = "✓" if null_count == 0 else "⚠" if null_count < len(normalized) else "✗"
-        print(f"    {status} {col}: {null_count}/{len(normalized)} ({pct:.1f}%)")
-    
-    if len(normalized) > 0:
-        print(f"\n  FIRST ROW AFTER NORMALIZATION:")
-        first_row = normalized.iloc[0]
-        for col in ['date', 'ticker', 'revenue', 'net_income', 'operating_income']:
-            if col in normalized.columns:
-                val = first_row[col]
-                print(f"    {col}: {repr(val)} (type: {type(val).__name__})")
-    
-    print(f"\n{'='*70}\n")
+    print(f"[_normalize_raw_data_fields] ✓ Output shape: {normalized.shape}")
+    print(f"[_normalize_raw_data_fields] ✓ Output columns: {normalized.columns.tolist()}")
     
     return normalized
 
@@ -290,8 +194,6 @@ def _engineer_svr_features(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with engineered features added
     """
-    
-    print(f"\n[_engineer_svr_features] INPUT: shape {df.shape}")
     
     work_df = df.copy()
     eps = 1e-9  # Small constant to avoid division by zero
@@ -326,10 +228,6 @@ def _engineer_svr_features(df: pd.DataFrame) -> pd.DataFrame:
     # Replace infinite values with NaN
     work_df = work_df.replace([np.inf, -np.inf], np.nan)
     
-    print(f"[_engineer_svr_features] OUTPUT: shape {work_df.shape}")
-    print(f"[_engineer_svr_features] ✓ FEATURES ENGINEERED: profit_margin, operating_margin,")
-    print(f"                          revenue_growth, net_income_growth, asset_efficiency, debt_to_asset")
-    
     return work_df
 
 
@@ -353,49 +251,38 @@ def retrieve_uploaded_data_by_ticker(
         Tuple of (DataFrame, source) or (None, error_message)
     """
     
-    print(f"\n[retrieve_uploaded_data_by_ticker] Starting for ticker: {ticker}")
-    
     # Strategy 1: Try uploaded_files table FIRST (raw data, most reliable)
     try:
-        print(f"[retrieve_uploaded_data] → Querying uploaded_files table...")
         response = supabase_client.table("uploaded_files").select(
             "file_content, ticker"
-        ).eq("ticker", ticker.upper()).limit(1).execute()
+        ).eq("user_id", user_id).limit(100).execute()
         
+        matched_rows = []
         if response.data and len(response.data) > 0:
-            file_content = response.data[0].get("file_content", [])
-            retrieved_ticker = response.data[0].get("ticker", ticker.upper())
-            
-            print(f"[retrieve_uploaded_data] ✓ Found data in uploaded_files")
-            print(f"[retrieve_uploaded_data]   - Retrieved ticker: {retrieved_ticker}")
-            print(f"[retrieve_uploaded_data]   - File content type: {type(file_content)}")
-            print(f"[retrieve_uploaded_data]   - File content length: {len(file_content) if isinstance(file_content, list) else 'N/A'}")
-            
+            matched_rows = [
+                r for r in response.data
+                if str(r.get("ticker", "")).upper() == ticker.upper()
+            ]
+
+        if matched_rows:
+            file_content = matched_rows[0].get("file_content", [])
             if isinstance(file_content, list) and len(file_content) > 0:
                 df = pd.DataFrame(file_content)
-                print(f"[retrieve_uploaded_data] ✓ Converted to DataFrame: {df.shape}")
-                
                 # Step 1: Normalize field names in raw data
-                print(f"[retrieve_uploaded_data] → Step 1: Normalizing raw data fields...")
-                df = _normalize_raw_data_fields(df, retrieved_ticker)
-                
+                df = _normalize_raw_data_fields(df, ticker.upper())
                 # Step 2: Engineer calculated features (growth, margins, ratios)
-                print(f"[retrieve_uploaded_data] → Step 2: Engineering features...")
                 df = _engineer_svr_features(df)
-                
                 # Step 3: Sort by date for growth calculations to be correct
                 if "date" in df.columns:
                     df = df.sort_values("date").reset_index(drop=True)
-                    print(f"[retrieve_uploaded_data] ✓ Sorted by date")
-                
-                print(f"[retrieve_uploaded_data] ✓✓✓ SUCCESS: Loaded {len(df)} records from uploaded_files (raw + engineered)")
+                print(f"[retrieve_uploaded_data] ✓ Loaded {len(df)} records from uploaded_files (raw)")
+                print(f"[retrieve_uploaded_data] ✓ Engineered features: profit_margin, operating_margin, revenue_growth, net_income_growth, asset_efficiency, debt_to_asset")
                 return df, "uploaded_files (raw + engineered)"
     except Exception as e:
-        print(f"[retrieve_uploaded_data] ℹ Note: uploaded_files query failed: {str(e)[:100]}")
+        print(f"[retrieve_uploaded_data] Note: uploaded_files query failed: {e}")
     
     # Strategy 2: Fallback to standard_table (already normalized + engineered)
     try:
-        print(f"[retrieve_uploaded_data] → Fallback: Querying standard_table...")
         response = supabase_client.table("standard_table").select(
             "*"
         ).eq("ticker", ticker.upper()).execute()
@@ -405,23 +292,19 @@ def retrieve_uploaded_data_by_ticker(
             print(f"[retrieve_uploaded_data] ✓ Loaded {len(df)} records from standard_table (pre-engineered)")
             return df, "standard_table"
     except Exception as e:
-        print(f"[retrieve_uploaded_data] ℹ Note: standard_table query failed: {str(e)[:100]}")
+        print(f"[retrieve_uploaded_data] Note: standard_table query failed: {e}")
     
-    print(f"[retrieve_uploaded_data] ✗✗✗ FAILURE: No data found for ticker {ticker}")
     return None, f"No data found for ticker {ticker}"
 
 
 def validate_and_prepare_svr_data(
     df: pd.DataFrame,
     ticker: str,
-    min_records: int = 3
-) -> Tuple[Optional[pd.DataFrame], list]:
+    min_records: int = 2
+) -> Tuple[pd.DataFrame, list]:
     """
     Validate that data has all required fields for SVR training.
     Returns cleaned DataFrame and list of validation messages/warnings.
-    
-    ENHANCED: Detailed field-by-field reporting, shows before/after row counts,
-    identifies exactly which records are dropped and why.
     
     Args:
         df: Input DataFrame from database/upload
@@ -432,78 +315,57 @@ def validate_and_prepare_svr_data(
         Tuple of (validated_df, validation_messages)
     """
     
-    print(f"\n{'='*70}")
-    print(f"FUNCTION: validate_and_prepare_svr_data()")
-    print(f"{'='*70}")
-    
     messages = []
-    
-    print(f"\n[INPUT VALIDATION]")
-    print(f"  Shape: {df.shape}")
-    print(f"  Columns: {df.columns.tolist()}")
-    print(f"  Expected ticker: {ticker}")
     
     # Check record count
     if len(df) < min_records:
         messages.append(f"⚠️ Only {len(df)} records (need ≥{min_records})")
-        print(f"  ⚠ Record count low: {len(df)} < {min_records}")
     
     # Check required fields
     missing_fields = [f for f in REQUIRED_SVR_FIELDS if f not in df.columns]
     if missing_fields:
         messages.append(f"⚠️ Missing fields: {', '.join(missing_fields)}")
-        print(f"  ⚠ Missing fields: {missing_fields}")
-    present_fields = [f for f in REQUIRED_SVR_FIELDS if f in df.columns]
-    print(f"  ✓ Present fields: {present_fields}")
     
     # Check ticker consistency
     if "ticker" in df.columns:
         tickers = df["ticker"].unique()
-        print(f"  Ticker info: {tickers.tolist()}")
         if len(tickers) > 1:
             messages.append(f"⚠️ Multiple tickers found: {', '.join(tickers)}")
     
     # Normalize data types
-    print(f"\n[DATA TYPE NORMALIZATION]")
     work_df = df.copy()
-    rows_start = len(work_df)
     
     # Convert date to datetime
     if "date" in work_df.columns:
-        before = work_df['date'].isna().sum()
-        work_df["date"] = pd.to_datetime(work_df["date"], errors="coerce")
-        after = work_df['date'].isna().sum()
-        before_rows = len(work_df)
+        work_df["date"] = _coerce_date_series(work_df["date"])
         work_df = work_df.dropna(subset=["date"])
-        after_rows = len(work_df)
-        print(f"  ✓ date: {after} NULLs after conversion, dropped {before_rows - after_rows} rows")
     
-    # Convert numeric fields
-    numeric_fields = REQUIRED_SVR_FIELDS + OPTIONAL_SVR_FIELDS
+    # Convert numeric financial fields only (never coerce ticker/date to numeric)
+    numeric_fields = [
+        "revenue",
+        "net_income",
+        "operating_income",
+        "total_assets",
+        "total_liabilities",
+        "operating_cashflow",
+    ] + OPTIONAL_SVR_FIELDS
+
     for field in numeric_fields:
         if field in work_df.columns:
-            work_df[field] = pd.to_numeric(work_df[field], errors="coerce")
+            work_df[field] = _coerce_numeric_series(work_df[field])
+
+    # Ensure ticker strings are preserved/normalized
+    if "ticker" in work_df.columns:
+        work_df["ticker"] = work_df["ticker"].astype(str).str.strip().replace({"": np.nan, "nan": np.nan})
     
     # Remove rows with NaN in required fields
-    print(f"\n[REQUIRED FIELD VALIDATION]")
     for field in REQUIRED_SVR_FIELDS:
         if field in work_df.columns:
-            before_count = len(work_df)
-            null_count = work_df[field].isna().sum()
+            initial_count = len(work_df)
             work_df = work_df.dropna(subset=[field])
-            after_count = len(work_df)
-            removed = before_count - after_count
-            
+            removed = initial_count - len(work_df)
             if removed > 0:
                 messages.append(f"ℹ️ Removed {removed} rows with missing '{field}'")
-                print(f"  - {field}: {removed} rows dropped ({null_count} NULLs found)")
-            else:
-                print(f"  ✓ {field}: all values present ({before_count} rows)")
-    
-    print(f"\n[FINAL VALIDATION]")
-    print(f"  Records at start: {rows_start}")
-    print(f"  Records remaining: {len(work_df)}")
-    print(f"  Records dropped: {rows_start - len(work_df)}")
     
     if len(work_df) == 0:
         messages.append(
@@ -511,37 +373,23 @@ def validate_and_prepare_svr_data(
             "Check your CSV has these columns: date, ticker, revenue, net_income, "
             "operating_income, total_assets, total_liabilities, operating_cashflow"
         )
-        print(f"\n  ❌❌❌ CRITICAL: All records dropped!")
         from etl.validator import print_engineered_features_report
         print_engineered_features_report(False, messages)
-        print(f"\n{'='*70}\n")
         return None, messages
     
     # Use validator.py to check engineered features are present and valid
     from etl.validator import validate_engineered_features, print_engineered_features_report
     
     is_valid, validation_issues = validate_engineered_features(work_df)
-    
     messages.extend(validation_issues)
-    print(f"\n[ENGINEERED FEATURES CHECK]")
-    print(f"  Valid: {is_valid}")
-    for issue in validation_issues:
-        print(f"  - {issue}")
-    
-    print_engineered_features_report(is_valid, validation_issues + messages)
     
     if not is_valid:
-        print(f"\n[VALIDATION FAILED]")
-        print(f"  ✗ Engineered features check failed")
-        print(f"{'='*70}\n")
+        print_engineered_features_report(is_valid, validation_issues)
         return None, messages
     
     # Check if we still have enough data
     if len(work_df) < min_records:
         messages.append(f"❌ CRITICAL: Only {len(work_df)} valid records (need ≥{min_records})")
-        print(f"\n[VALIDATION FAILED]")
-        print(f"  ✗ Insufficient records: {len(work_df)} < {min_records}")
-        print(f"{'='*70}\n")
         return None, messages
     
     # Sort by date
@@ -549,11 +397,6 @@ def validate_and_prepare_svr_data(
         work_df = work_df.sort_values("date").reset_index(drop=True)
     
     messages.append(f"✅ Prepared {len(work_df)} clean records for SVR training")
-    
-    print(f"\n[FINAL OUTPUT]")
-    print(f"  ✓ Ready for SVR training: {len(work_df)} records, {work_df.shape[1]} columns")
-    print(f"{'='*70}\n")
-    
     print_engineered_features_report(True, messages)
     
     return work_df, messages
@@ -587,6 +430,10 @@ def load_and_validate_training_data(
     if standard_records and len(standard_records) > 0:
         all_messages.append("ℹ️ Using provided uploaded records")
         df = pd.DataFrame(standard_records)
+        if "ticker" not in df.columns:
+            df["ticker"] = ticker
+        else:
+            df["ticker"] = df["ticker"].fillna(ticker)
     else:
         # Otherwise retrieve from database
         all_messages.append("→ Retrieving from database...")
@@ -609,8 +456,8 @@ def load_and_validate_training_data(
         return None, all_messages
     
     # Final checks
-    if len(prepared_df) < 3:
-        all_messages.append("❌ CRITICAL: Insufficient data for model training")
+    if len(prepared_df) < 2:
+        all_messages.append("❌ CRITICAL: Insufficient data for model training (need at least 2 periods)")
         return None, all_messages
     
     all_messages.append(f"✅ Data Ready: {len(prepared_df)} records with all required fields")

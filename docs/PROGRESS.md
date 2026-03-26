@@ -1,8 +1,17 @@
 # FinCast Project Progress Tracker
 
-**Last Updated:** March 12, 2026
-**Overall Completion:** 72%  
-**Latest Milestone:** ✅ Phase 5 Complete (SHAP Explainability reports generated)
+**Last Updated:** March 26, 2026
+**Overall Completion:** 82%  
+**Latest Milestone:** ✅ Phase 6 Integrated (LLM recommendations + auth/upload pipeline)
+
+### Latest Update (March 26, 2026)
+- [x] Added Phase 6 runtime support in `run.py` (`python run.py 6` and full pipeline `python run.py all`)
+- [x] Implemented LLM recommendation engine in `analysis/recommendation_engine.py` (Groq + structured JSON outputs)
+- [x] Added Supabase auth module in `auth/supabase_auth.py` and integrated login flow in `app.py`
+- [x] Added uploaded-data analysis pipeline in `analysis/auto_analysis.py` with ticker-specific Phase 4/5 generation
+- [x] Added SVR data validation and retrieval enhancements (`analysis/data_retrieval_svr.py`, `etl/validator.py`)
+- [x] Added user-upload and recommendation table support in SQL/policies (`etl/create_tables.sql`, `etl/fix_rls_policies.sql`)
+- [x] Generated and validated latest reports (Phases 4-6) under `analysis/reports/`
 
 ### Consolidation Update (March 16, 2026)
 - [x] Merged cleaner ETL adapter/factory pattern from fincast into `etl/extract.py`
@@ -222,7 +231,7 @@
 **Key Results:**
 - SHAP-based explainability module added for SVR growth-rate predictions
 - Global feature impact computed and exported (mean absolute SHAP values)
-- Local per-company explanations generated for future predictions (AAPL, MSFT, GOOGL)
+- Local per-company explanations generated for future predictions (AAPL, AMZN, GOOGL)
 - Explainability artifacts saved under `analysis/reports/` for Phase 6 integration
 
 **Components Built:**
@@ -238,49 +247,54 @@
 
 ---
 
-## Phase 6: LLM-Based Recommendation Engine ⏳
+## Phase 6: LLM-Based Recommendation Engine ✅ (Integrated Baseline Complete)
 
 ### 6.1 Recommendation Generation
-- [ ] LLM API integration
-- [ ] Prompt engineering for financial insights
-- [ ] Recommendation synthesis from:
-  - [ ] SVR predictions
-  - [ ] Target gaps
-  - [ ] Feature contributions
-  - [ ] Financial ratios
+- [x] LLM API integration
+- [x] Prompt engineering for financial insights
+- [x] Recommendation synthesis from:
+   - [x] SVR predictions
+   - [x] Target gaps
+   - [x] Feature contributions
+   - [x] Financial ratios
 
-**Status:** Not started
+**Status:** Complete (Integrated Baseline)
 
 ### 6.2 Output Generation
-- [ ] Natural language recommendations
-- [ ] Actionable business insights
-- [ ] Risk assessment narratives
-- [ ] Growth opportunity identification
+- [x] Natural language recommendations
+- [x] Actionable business insights
+- [x] Risk assessment narratives
+- [x] Growth opportunity identification
 
-**Status:** Not started
+**Status:** Complete (Integrated Baseline)
+
+**Output Files Generated:**
+- `analysis/reports/phase_6_aapl_recommendations.json`
+- `analysis/reports/phase_6_amzn_recommendations.json`
+- `analysis/reports/phase_6_googl_recommendations.json`
 
 ---
 
-## Phase 7: User Interface - Streamlit ⏳
+## Phase 7: User Interface - Streamlit 🔄
 
 ### 7.1 Dashboard Components
-- [ ] Data upload interface
-- [ ] Company selection dropdown
-- [ ] Historical data visualization
-- [ ] Financial metrics display
-- [ ] SVR model predictions visualization
-- [ ] Explainability charts and heatmaps
+- [x] Data upload interface
+- [x] Company selection dropdown
+- [x] Historical data visualization
+- [x] Financial metrics display
+- [x] SVR model predictions visualization
+- [x] Explainability charts and heatmaps
 
-**Status:** Not started
+**Status:** In progress (core flows integrated)
 
 ### 7.2 Interactive Features
-- [ ] Real-time filtering
-- [ ] Comparative analysis view
+- [x] Real-time filtering
+- [x] Comparative analysis view
 - [ ] Report generation and export
-- [ ] Prediction drill-down
-- [ ] Recommendation details panel
+- [x] Prediction drill-down
+- [x] Recommendation details panel
 
-**Status:** Not started
+**Status:** In progress
 
 ### 7.3 Accessibility
 - [ ] User-friendly layouts
@@ -354,8 +368,8 @@
 | ✅ SVR Model Trained & Evaluated | Feb 28, 2026 | Complete (Baseline) |
 | ✅ Codebase Reorganized & Pushed | Mar 12, 2026 | Complete |
 | ✅ Explainable AI Integration | Mar 12, 2026 | Complete (Baseline) |
-| ⏳ LLM Recommendations Working | TBD | Pending |
-| ⏳ Streamlit Dashboard Complete | TBD | Pending |
+| ✅ LLM Recommendations Working | Mar 26, 2026 | Complete (Integrated Baseline) |
+| 🔄 Streamlit Dashboard Core Integration | Mar 26, 2026 | In Progress |
 | ⏳ Full Testing & Validation | TBD | Pending |
 | ⏳ Project Completion & Demo Ready | TBD | Pending |
 
@@ -377,8 +391,8 @@
 ✅ Phase 5 SHAP explainability complete (global and local feature contributions)  
 
 ### What's Next (Immediate)
-1. Begin Phase 6 — LLM recommendation engine integration
-2. Map Phase 4 + Phase 5 outputs to recommendation prompts and templates
+1. Stabilize Phase 7 dashboard UX and complete report export flow
+2. Add Phase 8 automated tests for ETL, SVR outputs, and recommendation schema
 3. Expand dataset coverage to improve SVR model generalization
 
 ### Blockers
@@ -391,8 +405,8 @@
 
 ```
 financial-report-analysis/
-├── run.py                                   (✅ Unified orchestrator - phases 3.1, 3.2, 4, 5)
-├── app.py                                   (⏳ Streamlit entry point - UI pending)
+├── run.py                                   (✅ Unified orchestrator - phases 3.1, 3.2, 4, 5, 6)
+├── app.py                                   (🔄 Streamlit dashboard - phases 1-6 integrated)
 ├── data/
 │   ├── raw/
 │   │   └── financial_data_raw.json          (✅ Source data - 60 records)
@@ -404,8 +418,8 @@ financial-report-analysis/
 │   ├── transform.py                         (✅ Outputs to data/staged/)
 │   ├── load.py                              (✅ Supabase loader)
 │   └── create_tables.sql                    (✅ Supabase schema)
-├── analysis/                                (✅ Complete - Phase 3.1 and 3.2 modules)
-│   └── reports/                             (✅ All analysis + SVR output CSVs/PNGs)
+├── analysis/                                (✅ Complete - Phase 3.1 to 6 modules integrated)
+│   └── reports/                             (✅ All analysis + SVR + SHAP + Phase 6 outputs)
 ├── models/
 │   ├── svr_pipeline.py                      (✅ Complete - Phase 4)
 │   └── explainability.py                    (✅ Complete - Phase 5)
@@ -500,10 +514,10 @@ financial-report-analysis/
 ✅ **Local Explanations:** Per-company SHAP contributions generated for future predictions
 ✅ **Orchestrator Update:** `run.py` supports `phase 5` and `--shap-nsamples`
 
-### Next Phase
-Ready to begin Phase 6 - LLM-Based Recommendation Engine:
-1. Build prompt templates from SVR forecasts + SHAP explanations
-2. Generate recommendation narratives (risk, growth, actions)
+### Next Focus
+Phase 7 + 8 completion plan:
+1. Finalize dashboard export/report UX and edge-case handling
+2. Add integration tests for end-to-end run (`run.py all`) and recommendation JSON validation
 3. Export recommendation reports aligned with dashboard/API output
 
 ---

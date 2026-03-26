@@ -126,7 +126,9 @@ def _create_basic_svr_predictions(ticker: str, df: pd.DataFrame) -> None:
         "ticker": ticker,
         "predicted_growth_rate": round(growth, 2),
         "model_accuracy": "Basic",
-        "gap_vs_10_percent_target": round(growth - 10, 2),
+        "target_growth_rate": 10.0,
+        "gap_vs_target": round(growth - 10, 2),
+        "gap_status": "surplus" if growth >= 10 else "shortfall",
     }])
     
     if os.path.exists(svr_path):
