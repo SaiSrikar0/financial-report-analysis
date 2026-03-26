@@ -62,7 +62,8 @@ def extract_data(source_type="api", source_path=None):
 
     if source_type.lower() in {"api", "json"} and not os.path.exists(input_path):
         raise FileNotFoundError(
-            "For source_type 'api'/'json', provide a local JSON path or generate data via data_retrieval/retrieve_api.py"
+            "For source_type 'api'/'json', provide a local JSON path or "
+            "generate data via data_retrieval/retrieve_api.py"
         )
 
     extractor = ExtractorFactory.get(source_type)
@@ -75,6 +76,31 @@ def extract_data(source_type="api", source_path=None):
     print(f"Data extracted and saved to {default_raw}")
     print(f"Total records extracted: {len(records)}")
     return default_raw
+
+
+# ── New: adapter for Streamlit UploadedFile objects ───────────────────────────
+
+class UploadExtractor:
+    """
+    Adapter for Streamlit UploadedFile objects.
+    Wraps file_processor and returns raw records list in the same format
+    used by the rest of the ETL pipeline.
+    """
+
+    def __init__(self, uploaded_file, ticker: str = "UNKNOWN"):
+        self.uploaded_file = uploaded_file
+        self.ticker = ticker
+
+    def extract(self) -> dict:
+        from etl.file_processor import process_upload
+
+        raw = process_upload(self.uploaded_file)
+        return {
+            "source": self.uploaded_file.name,
+            "ticker": self.ticker,
+            "records": raw,
+            "record_count": len(raw),
+        }
 
 
 if __name__ == "__main__":

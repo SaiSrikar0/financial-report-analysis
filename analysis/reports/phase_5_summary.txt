@@ -1,22 +1,22 @@
 ======================================================================
 PHASE 5: EXPLAINABLE AI (SHAP) SUMMARY
 ======================================================================
-Generated: 2026-03-16 10:55:15
+Generated: 2026-03-26 03:04:55
 Data Source: supabase
 Cutoff Date (time-aware split): 2021-09-30
 
 1. GLOBAL FEATURE IMPACT (Top 10 by mean |SHAP|)
 ----------------------------------------------------------------------
-- asset_efficiency: 8.412362
-- total_assets: 5.186644
-- profit_margin: 5.169902
-- revenue_growth: 5.043707
-- operating_margin: 4.530927
-- net_income: 4.162727
-- operating_income: 3.456988
-- revenue: 2.798441
-- ticker_GOOGL: 2.671161
-- debt_to_asset: 2.609872
+- asset_efficiency: 8.212421
+- revenue_growth: 5.201693
+- total_assets: 5.088635
+- profit_margin: 5.031322
+- operating_margin: 4.676809
+- net_income: 3.984753
+- operating_income: 3.517882
+- revenue: 2.730346
+- ticker_GOOGL: 2.704681
+- debt_to_asset: 2.496374
 
 2. LOCAL EXPLANATIONS (Future predictions)
 ----------------------------------------------------------------------
