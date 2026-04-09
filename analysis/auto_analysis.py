@@ -159,7 +159,7 @@ def _create_basic_shap_importance(ticker: str, df: pd.DataFrame) -> None:
     
     shap_df = pd.DataFrame({
         "feature": features.index,
-        "mean_abs_shap_value": features.values,
+        "mean_abs_shap": features.values,
     })
     
     shap_path = os.path.join(reports_dir, "phase_5_shap_global_importance.csv")
