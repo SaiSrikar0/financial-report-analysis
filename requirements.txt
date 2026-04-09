@@ -21,7 +21,7 @@ streamlit==1.28.1
 
 # API & HTTP
 requests==2.31.0
-httpx>=0.26
+httpx>=0.26,<0.28
 
 # Utilities
 python-dateutil==2.8.2
@@ -40,3 +40,6 @@ xlrd>=2.0.1
 
 # Config / YAML
 pyyaml>=6.0.1
+
+# Realtime transport compatibility (supabase/realtime)
+websockets>=11,<16
