@@ -260,7 +260,11 @@ def load_shap_data() -> dict:
     data = {}
     global_file = reports_path / "phase_5_shap_global_importance.csv"
     if global_file.exists():
-        data["global_importance"] = pd.read_csv(global_file)
+        global_df = pd.read_csv(global_file)
+        # Support both legacy and current fallback naming from different pipelines.
+        if "mean_abs_shap" not in global_df.columns and "mean_abs_shap_value" in global_df.columns:
+            global_df = global_df.rename(columns={"mean_abs_shap_value": "mean_abs_shap"})
+        data["global_importance"] = global_df
     local_file = reports_path / "phase_5_shap_local_explanations.csv"
     if local_file.exists():
         data["local_explanations"] = pd.read_csv(local_file)
@@ -318,6 +322,12 @@ def infer_ticker_from_upload(raw_records: list, filename: str) -> tuple[str, str
     return "UNKNOWN", "fallback"
 
 
+def request_navigation(page_name: str) -> None:
+    """Schedule navigation for next rerun to avoid modifying widget state post-instantiation."""
+    st.session_state["pending_nav_page"] = page_name
+    st.rerun()
+
+
 def has_svr_predictions(ticker: str) -> bool:
     """Check if SVR predictions exist for a ticker."""
     svr_path = "analysis/reports/svr_future_predictions.csv"
@@ -343,76 +353,98 @@ def run_svr_training_button(
     Returns True if training was run successfully.
     """
     if st.button(f"🚀 Train SVR for {ticker}", type="primary", use_container_width=True, key=f"train_svr_{ticker}"):
-        with st.status("🔄 Training SVR Model...", expanded=True) as status_analysis:
-            try:
-                from analysis.auto_analysis import run_uploaded_analysis_pipeline, display_analysis_progress
-                
-                st.write("📊 Initializing training pipeline...")
-                supabase = get_supabase_client()
-                final_user_id = user_id or get_user_id()
-                
-                st.write(f"🎯 Training for: **{ticker}**")
-                st.write("📈 Loading and engineering data...")
-                
-                # Run the unified training pipeline
-                result = run_uploaded_analysis_pipeline(
-                    ticker,
-                    final_user_id,
-                    supabase,
-                    standard_records=standard_records,
-                    category_records=category_records,
-                )
-                
-                # Display progress
-                display_analysis_progress(result, st)
-                
-                if result["success"]:
-                    status_analysis.update(label="✅ Training Complete!", state="complete")
-                    st.balloons()
-                    st.success(f"✅ **{ticker}** trained successfully!")
-                    st.info(f"📊 Results saved to `analysis/reports/`")
+        return run_svr_training_pipeline(
+            ticker=ticker,
+            standard_records=standard_records,
+            category_records=category_records,
+            user_id=user_id,
+            navigate_to_recommendations=navigate_to_recommendations,
+        )
+    return False
 
-                    if navigate_to_recommendations:
-                        st.session_state["nav_page"] = "🤖 AI Recommendations"
-                        st.session_state["preferred_ticker"] = ticker
-                        st.rerun()
 
-                    return True
-                else:
-                    # Detailed error display
-                    status_analysis.update(label="❌ Training Failed", state="error")
-                    
-                    st.error("❌ **Training could not complete**")
-                    
-                    # Show messages without nested expander
-                    if result.get("messages"):
-                        st.write("**Details:**")
-                        for msg in result["messages"]:
-                            if "CRITICAL" in msg or "❌" in msg:
-                                st.error(f"• {msg}")
-                            elif "⚠️" in msg:
-                                st.warning(f"• {msg}")
-                            else:
-                                st.info(f"• {msg}")
-                    
-                    st.markdown("---")
-                    st.markdown("**🔧 Troubleshooting:**")
-                    st.markdown("""
+def run_svr_training_pipeline(
+    ticker: str,
+    standard_records: list = None,
+    category_records: list = None,
+    user_id: str = None,
+    navigate_to_recommendations: bool = False,
+    auto_generate_recommendations: bool = False,
+) -> bool:
+    """Run the SVR + SHAP training pipeline directly and optionally navigate."""
+    with st.status("🔄 Training SVR Model...", expanded=True) as status_analysis:
+        try:
+            from analysis.auto_analysis import run_uploaded_analysis_pipeline, display_analysis_progress
+
+            st.write("📊 Initializing training pipeline...")
+            supabase = get_supabase_client()
+            final_user_id = user_id or get_user_id()
+
+            st.write(f"🎯 Training for: **{ticker}**")
+            st.write("📈 Loading and engineering data...")
+
+            # Run the unified training pipeline
+            result = run_uploaded_analysis_pipeline(
+                ticker,
+                final_user_id,
+                supabase,
+                standard_records=standard_records,
+                category_records=category_records,
+            )
+
+            # Display progress
+            display_analysis_progress(result, st)
+
+            if result["success"]:
+                status_analysis.update(label="✅ Training Complete!", state="complete")
+                st.balloons()
+                st.success(f"✅ **{ticker}** trained successfully!")
+                st.info("📊 Results saved to analysis/reports/")
+
+                if navigate_to_recommendations:
+                    st.session_state["preferred_ticker"] = ticker
+                    if auto_generate_recommendations:
+                        st.session_state.pop("recommendations", None)
+                        st.session_state.pop("rec_ticker", None)
+                        st.session_state["auto_generate_recommendations"] = True
+                        st.session_state["auto_generate_ticker"] = ticker
+                    request_navigation("🤖 AI Recommendations")
+
+                return True
+
+            # Detailed error display
+            status_analysis.update(label="❌ Training Failed", state="error")
+
+            st.error("❌ **Training could not complete**")
+
+            # Show messages without nested expander
+            if result.get("messages"):
+                st.write("**Details:**")
+                for msg in result["messages"]:
+                    if "CRITICAL" in msg or "❌" in msg:
+                        st.error(f"• {msg}")
+                    elif "⚠️" in msg:
+                        st.warning(f"• {msg}")
+                    else:
+                        st.info(f"• {msg}")
+
+            st.markdown("---")
+            st.markdown("**🔧 Troubleshooting:**")
+            st.markdown("""
 - Ensure your CSV has all required columns: `date`, `ticker`, `revenue`, `net_income`, `operating_income`, `total_assets`, `total_liabilities`, `operating_cashflow`
 - Check that data has at least 3 periods (years/quarters)
 - Make sure numeric values are valid numbers (not text like "$1,000")
 - Try uploading the CSV file again and ensure the ticker matches the company name
-                    """)
-                    return False
-            except Exception as e:
-                status_analysis.update(label="✗ Training Error", state="error")
-                st.error(f"**Pipeline Error:** {e}")
-                
-                st.code(str(e), language="python")
-                
-                st.warning("Please check your data and try again. Contact support if issue persists.")
-                return False
-    return False
+            """)
+            return False
+        except Exception as e:
+            status_analysis.update(label="✗ Training Error", state="error")
+            st.error(f"**Pipeline Error:** {e}")
+
+            st.code(str(e), language="python")
+
+            st.warning("Please check your data and try again. Contact support if issue persists.")
+            return False
 
 
 def style_figure(fig: go.Figure) -> go.Figure:
@@ -508,6 +540,153 @@ def build_light_recommendation(filtered: pd.DataFrame, ticker: str, year: int) -
     return {"status": status, "strengths": strengths, "risks": risks, "actions": actions}
 
 
+def build_fallback_recommendation(
+    ticker: str,
+    analysis_bundle: dict,
+    standard_df: pd.DataFrame,
+) -> dict:
+    """Create a deterministic recommendation payload when LLM APIs are unavailable."""
+    def _safe_float(value, default: float = 0.0) -> float:
+        try:
+            if value is None or pd.isna(value):
+                return default
+            return float(value)
+        except Exception:
+            return default
+
+    if standard_df is None or standard_df.empty:
+        light = {"status": "Unavailable", "strengths": [], "risks": [], "actions": []}
+        year = pd.Timestamp.now().year
+    else:
+        work = standard_df.copy()
+        if "date" in work.columns:
+            work["date"] = pd.to_datetime(work["date"], errors="coerce")
+            max_year = work[
+                work["ticker"].astype(str).str.upper() == ticker.upper()
+            ]["date"].dt.year.max()
+            if pd.isna(max_year):
+                year = pd.Timestamp.now().year
+            else:
+                year = int(max_year)
+        else:
+            year = pd.Timestamp.now().year
+        light = build_light_recommendation(work, ticker, year)
+
+    svr = analysis_bundle.get("svr_predictions", {}) or {}
+    metrics = analysis_bundle.get("model_metrics", {}) or {}
+
+    predicted_growth = _safe_float(svr.get("predicted_growth_rate", 0), 0.0)
+    gap = _safe_float(svr.get("gap_vs_target", predicted_growth - 10), predicted_growth - 10)
+    gap_status = str(svr.get("gap_status", "surplus" if gap >= 0 else "shortfall"))
+
+    r2 = _safe_float(metrics.get("r2", 0), 0.0)
+    if r2 >= 0.7:
+        confidence = "High"
+    elif r2 >= 0.4:
+        confidence = "Medium"
+    else:
+        confidence = "Low"
+
+    risk_level = "Medium"
+    if light["status"] == "Profitable" and gap >= 0:
+        risk_level = "Low"
+    elif light["status"] == "Loss" or gap < -5:
+        risk_level = "High"
+
+    score = 6
+    if light["status"] == "Profitable":
+        score += 2
+    if gap >= 0:
+        score += 1
+    if risk_level == "High":
+        score -= 2
+    score = max(1, min(10, score))
+
+    key_drivers = light.get("strengths", [])[:3]
+    if not key_drivers:
+        key_drivers = ["Data loaded successfully; awaiting richer model interpretation."]
+
+    action_items = []
+    for a in light.get("actions", []):
+        action_items.append(
+            {
+                "priority": "High" if "debt" in a.lower() or "cost" in a.lower() else "Medium",
+                "action": a,
+                "rationale": "Derived from financial ratio and trend checks in fallback mode.",
+                "timeline": "6-months",
+            }
+        )
+
+    if not action_items:
+        action_items.append(
+            {
+                "priority": "Medium",
+                "action": "Maintain current operating plan and monitor margin/debt trends monthly.",
+                "rationale": "Fallback mode found no critical actions but recommends active monitoring.",
+                "timeline": "immediate",
+            }
+        )
+
+    opportunities = []
+    if gap < 0:
+        opportunities.append(
+            {
+                "title": "Close growth gap to 10% target",
+                "rationale": "Improve revenue momentum and margin quality through pricing, mix, and execution discipline.",
+                "estimated_upside": f"{abs(gap):.1f}% toward target",
+            }
+        )
+    else:
+        opportunities.append(
+            {
+                "title": "Sustain above-target growth",
+                "rationale": "Protect forecast outperformance with capacity planning and operating controls.",
+                "estimated_upside": "Maintain momentum with lower volatility",
+            }
+        )
+
+    return {
+        "executive_summary": (
+            f"Fallback recommendations generated for {ticker} because the LLM provider is rate-limited. "
+            f"Current financial signals indicate status: {light['status']} with predicted growth {predicted_growth:.2f}%."
+        ),
+        "performance_score": score,
+        "growth_outlook": {
+            "forecast": (
+                f"Predicted growth is {predicted_growth:.2f}% with a {gap_status} of {gap:.2f}% vs 10% target. "
+                "Forecast confidence is based on available SVR evaluation metrics."
+            ),
+            "predicted_growth_rate": round(predicted_growth, 2),
+            "gap_vs_target": round(gap, 2),
+            "gap_status": gap_status,
+            "confidence": confidence,
+            "key_drivers": key_drivers,
+            "critical_concern": (
+                "Growth shortfall persists versus target; prioritize margin and efficiency improvements."
+                if gap < 0
+                else "No immediate structural concern detected in fallback analysis."
+            ),
+        },
+        "risk_assessment": {
+            "overall_risk": risk_level,
+            "risk_factors": [
+                {
+                    "factor": "Profitability and leverage trend",
+                    "severity": risk_level,
+                    "explanation": "; ".join(light.get("risks", [])[:2]) or "No major risks flagged by fallback analysis.",
+                }
+            ],
+            "critical_warnings": light.get("risks", [])[:2],
+            "risk_trend": "stable",
+        },
+        "opportunities": opportunities,
+        "action_items": action_items,
+        "peer_positioning": "Peer positioning unavailable in fallback mode; rerun when API quota resets for full peer-relative narrative.",
+        "anomalies_flagged": analysis_bundle.get("anomalies", [])[:3],
+        "investment_verdict": "HOLD" if risk_level == "Medium" else ("BUY" if risk_level == "Low" else "REDUCE"),
+    }
+
+
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
@@ -530,7 +709,15 @@ with st.sidebar:
         "📤 Upload Data",
         "🤖 AI Recommendations",
     ]
-    current_page = st.session_state.get("nav_page", "📊 Dashboard")
+
+    pending_page = st.session_state.pop("pending_nav_page", None)
+    if pending_page in nav_options:
+        st.session_state["nav_page"] = pending_page
+
+    current_page = st.session_state.get(
+        "nav_page",
+        st.session_state.get("nav_page_widget", "📊 Dashboard"),
+    )
     if current_page not in nav_options:
         current_page = "📊 Dashboard"
 
@@ -538,9 +725,10 @@ with st.sidebar:
         "Navigation",
         nav_options,
         index=nav_options.index(current_page),
-        key="nav_page",
+        key="nav_page_widget",
         label_visibility="collapsed",
     )
+    st.session_state["nav_page"] = page
     st.divider()
 
     # Existing sidebar controls (only shown on Dashboard page)
@@ -1046,18 +1234,23 @@ if page == "📊 Dashboard":
                     "<div class='section-title'>Global Feature Importance (Mean Absolute SHAP)</div>",
                     unsafe_allow_html=True,
                 )
-                global_imp = shap_data["global_importance"].sort_values(
-                    "mean_abs_shap", ascending=True
-                )
-                fig_global = px.bar(
-                    global_imp, x="mean_abs_shap", y="feature",
-                    color="mean_abs_shap", orientation="h",
-                    color_continuous_scale=["#3c82ff", "#44d1ff", "#2ee6a8"],
-                )
-                style_figure(fig_global)
-                fig_global.update_xaxes(title_text="Mean Absolute SHAP Value")
-                fig_global.update_yaxes(title_text="Feature")
-                st.plotly_chart(fig_global, use_container_width=True)
+                global_imp = shap_data["global_importance"].copy()
+                if "mean_abs_shap" not in global_imp.columns and "mean_abs_shap_value" in global_imp.columns:
+                    global_imp = global_imp.rename(columns={"mean_abs_shap_value": "mean_abs_shap"})
+
+                if "mean_abs_shap" not in global_imp.columns or "feature" not in global_imp.columns:
+                    st.warning("SHAP global importance file is missing expected columns (`feature`, `mean_abs_shap`).")
+                else:
+                    global_imp = global_imp.sort_values("mean_abs_shap", ascending=True)
+                    fig_global = px.bar(
+                        global_imp, x="mean_abs_shap", y="feature",
+                        color="mean_abs_shap", orientation="h",
+                        color_continuous_scale=["#3c82ff", "#44d1ff", "#2ee6a8"],
+                    )
+                    style_figure(fig_global)
+                    fig_global.update_xaxes(title_text="Mean Absolute SHAP Value")
+                    fig_global.update_yaxes(title_text="Feature")
+                    st.plotly_chart(fig_global, use_container_width=True)
                 st.markdown("</div>", unsafe_allow_html=True)
 
             if "local_explanations" in shap_data:
@@ -1201,9 +1394,8 @@ elif page == "📤 Upload Data":
                         "No duplicate upload was added."
                     )
                     status.update(label="Already present", state="complete")
-                    st.session_state["nav_page"] = "🤖 AI Recommendations"
                     st.session_state["preferred_ticker"] = ticker_clean
-                    st.rerun()
+                    request_navigation("🤖 AI Recommendations")
 
                 # Step 2: Store raw file in uploaded_files table
                 st.write("☁️  Storing raw upload...")
@@ -1279,44 +1471,65 @@ elif page == "📤 Upload Data":
                     category_df = pd.DataFrame(tables["category_table"])
                     supabase = get_supabase_client()
                     
-                    success = load_user_data(
+                    load_result = load_user_data(
                         standard_df, 
                         category_df, 
                         supabase, 
-                        user_id
+                        user_id,
+                        return_details=True,
                     )
-                    
-                    if success:
+
+                    if load_result.get("success"):
                         st.write("✅ Data stored to database.")
                     else:
-                        st.warning("⚠️  Could not store all data to database (see logs).")
+                        st.warning("⚠️ Could not store all data to database.")
+                        for err in load_result.get("errors", []):
+                            st.caption(f"DB detail: {err}")
                 except Exception as e:
                     st.warning(f"⚠️  Storage warning: {e}")
 
                 status.update(label="✅ Data ready for analysis!", state="complete")
 
             st.markdown("\n---\n")
-            
-            st.success(
-                f"✅ **{ticker_clean}** data successfully stored! "
-                f"**{len(tables['standard_table'])} rows** are now in your secure database."
-            )
-            
-            # Show training section
-            st.markdown("### Next: Train Analysis Pipeline")
-            st.write(
-                f"Before generating AI recommendations, train the analysis pipeline for **{ticker_clean}**. "
-                f"This generates growth predictions and feature importance analytics."
-            )
-            
-            # Use the unified training button
-            run_svr_training_button(
-                ticker_clean,
-                standard_records=standard_records,
-                category_records=category_records,
+
+            st.session_state["upload_ready_ticker"] = ticker_clean
+            st.session_state["upload_ready_standard_records"] = standard_records
+            st.session_state["upload_ready_category_records"] = category_records
+            st.session_state["upload_ready_row_count"] = len(tables["standard_table"])
+
+    upload_ready_ticker = st.session_state.get("upload_ready_ticker")
+    upload_ready_standard_records = st.session_state.get("upload_ready_standard_records")
+    upload_ready_category_records = st.session_state.get("upload_ready_category_records")
+    upload_ready_row_count = st.session_state.get("upload_ready_row_count")
+
+    if upload_ready_ticker and upload_ready_standard_records is not None and upload_ready_category_records is not None:
+        st.markdown("\n---\n")
+        st.success(
+            f"✅ **{upload_ready_ticker}** data has been collected and is ready for the model to train. "
+            f"**{upload_ready_row_count} rows** are now in your secure database."
+        )
+        st.markdown("### Next Step")
+        st.write("Click below to start SVR training immediately and open AI recommendations automatically.")
+
+        if st.button(
+            f"➡️ Train Model and Open Recommendations for {upload_ready_ticker}",
+            type="primary",
+            use_container_width=True,
+            key=f"train_and_go_{upload_ready_ticker}",
+        ):
+            success = run_svr_training_pipeline(
+                ticker=upload_ready_ticker,
+                standard_records=upload_ready_standard_records,
+                category_records=upload_ready_category_records,
                 user_id=user_id,
                 navigate_to_recommendations=True,
+                auto_generate_recommendations=True,
             )
+            if success:
+                st.session_state.pop("upload_ready_ticker", None)
+                st.session_state.pop("upload_ready_standard_records", None)
+                st.session_state.pop("upload_ready_category_records", None)
+                st.session_state.pop("upload_ready_row_count", None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1383,7 +1596,15 @@ elif page == "🤖 AI Recommendations":
             "Generates risk, growth & action narratives"
         )
 
-    if gen_btn:
+    auto_generate_requested = st.session_state.get("auto_generate_recommendations", False)
+    auto_generate_ticker = st.session_state.get("auto_generate_ticker")
+    should_auto_generate = (
+        auto_generate_requested
+        and auto_generate_ticker == selected_ticker
+        and "recommendations" not in st.session_state
+    )
+
+    if gen_btn or should_auto_generate:
         with st.spinner(f"Analyzing {selected_ticker}..."):
             try:
                 from etl.load import store_recommendation_results
@@ -1395,7 +1616,28 @@ elif page == "🤖 AI Recommendations":
                         "Train SVR first from Upload Data in this app."
                     )
                     st.stop()
-                recs = generate_recommendations(bundle)
+                try:
+                    recs = generate_recommendations(bundle)
+                except Exception as llm_error:
+                    err_txt = str(llm_error)
+                    is_rate_limited = (
+                        "rate limit" in err_txt.lower()
+                        or "429" in err_txt
+                        or "rate_limit_exceeded" in err_txt
+                    )
+                    if not is_rate_limited:
+                        raise
+                    try:
+                        supabase = get_supabase_client()
+                        std_df = load_user_standard_table(user_id, supabase)
+                    except Exception:
+                        std_df = pd.DataFrame()
+
+                    recs = build_fallback_recommendation(
+                        ticker=selected_ticker,
+                        analysis_bundle=bundle,
+                        standard_df=std_df,
+                    )
                 
                 # Store recommendations in Supabase
                 supabase = get_supabase_client()
@@ -1412,6 +1654,8 @@ elif page == "🤖 AI Recommendations":
                 
                 st.session_state["recommendations"] = recs
                 st.session_state["rec_ticker"] = selected_ticker
+                st.session_state.pop("auto_generate_recommendations", None)
+                st.session_state.pop("auto_generate_ticker", None)
             except Exception as e:
                 st.error(f"Recommendation generation failed: {e}")
                 st.stop()

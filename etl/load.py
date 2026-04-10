@@ -49,11 +49,26 @@ def _df_to_records(df: pd.DataFrame) -> list[dict]:
     return data.to_dict(orient="records")
 
 
-def _batch_upsert(client, table_name: str, records: list[dict]):
+def _batch_upsert(client, table_name: str, records: list[dict], on_conflict: str | None = None):
     total = len(records)
     for i in range(0, total, BATCH_SIZE):
         batch = records[i : i + BATCH_SIZE]
-        client.table(table_name).upsert(batch).execute()
+        try:
+            if on_conflict:
+                client.table(table_name).upsert(batch, on_conflict=on_conflict).execute()
+            else:
+                client.table(table_name).upsert(batch).execute()
+        except Exception as e:
+            # Fallback for environments where unique constraints were not migrated yet.
+            msg = str(e).lower()
+            if "no unique" in msg or "there is no unique or exclusion constraint" in msg:
+                print(
+                    f"[_batch_upsert] ⚠️ Upsert not available for {table_name} without unique constraint. "
+                    "Falling back to insert."
+                )
+                client.table(table_name).insert(batch).execute()
+            else:
+                raise
         end = min(i + BATCH_SIZE, total)
         print(f"Upserted rows {i + 1}-{end} of {total} into {table_name}")
 
@@ -103,6 +118,42 @@ def store_uploaded_file(
         print(f"[store_uploaded_file] ✗ CRITICAL: Invalid user_id: '{user_id}'. User must be authenticated.")
         return False
 
+    if not raw_records:
+        print("[store_uploaded_file] ✗ CRITICAL: No records to store.")
+        return False
+
+    # Prefer service-role client for backend inserts; fall back to provided client.
+    client = None
+    try:
+        client = get_supabase_admin_client()
+    except Exception as e:
+        print(f"[store_uploaded_file] ⚠️ Admin client unavailable, using session client: {e}")
+        client = supabase_client
+
+    if client is None:
+        print("[store_uploaded_file] ✗ CRITICAL: No Supabase client available for insert.")
+        return False
+
+    try:
+        record = {
+            "user_id": user_id,
+            "filename": filename,
+            "file_content": raw_records,  # Stored as JSONB
+            "ticker": str(ticker).upper(),
+        }
+        print(
+            f"[store_uploaded_file] DEBUG: inserting user_id={user_id[:8]}..., "
+            f"ticker={record['ticker']}, records={len(raw_records)}"
+        )
+        client.table("uploaded_files").insert(record).execute()
+        print(f"[store_uploaded_file] ✓ Stored {len(raw_records)} records for {record['ticker']} (user={user_id[:8]}...)")
+        return True
+    except Exception as e:
+        print(f"[store_uploaded_file] ✗ CRITICAL ERROR: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 
 def _stable_records_hash(raw_records: list) -> str:
     """Compute deterministic hash for JSON-like record list."""
@@ -143,29 +194,6 @@ def is_duplicate_uploaded_file(
     except Exception as e:
         print(f"[is_duplicate_uploaded_file] Warning: {type(e).__name__}: {e}")
         # Fail-open to avoid blocking uploads on transient DB errors.
-        return False
-    
-    if not raw_records:
-        print(f"[store_uploaded_file] ✗ CRITICAL: No records to store.")
-        return False
-    
-    try:
-        # Use admin client (service role) to bypass RLS
-        admin_client = get_supabase_admin_client()
-        record = {
-            "user_id": user_id,
-            "filename": filename,
-            "file_content": raw_records,  # Stored as JSONB
-            "ticker": ticker,
-        }
-        print(f"[store_uploaded_file] DEBUG: Attempting to insert for user_id={user_id[:8]}..., ticker={ticker}, records={len(raw_records)}")
-        response = admin_client.table("uploaded_files").insert(record).execute()
-        print(f"[store_uploaded_file] ✓ Stored {len(raw_records)} records for {ticker} (user={user_id[:8]}...)")
-        return True
-    except Exception as e:
-        print(f"[store_uploaded_file] ✗ CRITICAL ERROR: {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
         return False
 
 
@@ -216,7 +244,8 @@ def load_user_data(
     category_df: pd.DataFrame,
     supabase_client,
     user_id: str,
-) -> bool:
+    return_details: bool = False,
+) -> bool | dict:
     """
     Load user-uploaded (LLM-transformed) DataFrames into Supabase.
     Tags every record with user_id for row-level isolation.
@@ -268,10 +297,24 @@ def load_user_data(
 
     errors = []
 
+    write_client = None
+    try:
+        write_client = get_supabase_admin_client()
+        print("[load_user_data] Using admin client for writes.")
+    except Exception as e:
+        print(f"[load_user_data] Admin client unavailable, using provided client: {e}")
+        write_client = supabase_client
+
+    if write_client is None:
+        error = "No Supabase write client available"
+        if return_details:
+            return {"success": False, "errors": [error]}
+        return False
+
     # standard_table
     try:
         std_records = _prepare(standard_df)
-        _batch_upsert(supabase_client, "standard_table", std_records)
+        _batch_upsert(write_client, "standard_table", std_records, on_conflict="ticker,date,user_id")
         print(
             f"[load_user_data] ✓ Loaded {len(std_records)} rows "
             f"into standard_table for user {user_id[:8]}…"
@@ -283,7 +326,7 @@ def load_user_data(
     # category_table
     try:
         cat_records = _prepare(category_df)
-        _batch_upsert(supabase_client, "category_table", cat_records)
+        _batch_upsert(write_client, "category_table", cat_records, on_conflict="ticker,date,user_id")
         print(
             f"[load_user_data] ✓ Loaded {len(cat_records)} rows "
             f"into category_table for user {user_id[:8]}…"
@@ -292,7 +335,10 @@ def load_user_data(
         errors.append(f"category_table: {e}")
         print(f"[load_user_data] ✗ category_table error: {e}")
 
-    return len(errors) == 0
+    success = len(errors) == 0
+    if return_details:
+        return {"success": success, "errors": errors}
+    return success
 
 
 def delete_user_uploaded_data(
