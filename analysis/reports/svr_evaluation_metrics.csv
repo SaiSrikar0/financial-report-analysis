@@ -1,2 +1,2 @@
-mae,rmse,r2,residual_mean,residual_std,residual_min,residual_max,test_size
-7.218152070048622,8.779651219687464,-0.5642132052073832,-6.770711724370973,5.589252032680672,-19.31596418412729,2.5795534667452964,20
+mae,rmse,r2,residual_mean,residual_std,residual_min,residual_max,test_size,selected_model,model_reliability,model_reliability_reason,beats_naive,naive_mae,best_benchmark_model
+3.5446373518881247,4.254221441982958,0.4963691782776878,-0.9007371909851942,4.157772551523672,-8.085423396480515,6.506913897957562,34,LinearRegression,Medium,adequate_fit_and_beats_naive,True,7.44182809592077,LinearRegression

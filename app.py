@@ -1729,6 +1729,66 @@ elif page == "🤖 AI Recommendations":
                 f"{score}/10",
             )
 
+        reliability_meta = recs.get("model_reliability", {}) if isinstance(recs, dict) else {}
+        if isinstance(reliability_meta, dict) and reliability_meta.get("low_confidence_mode"):
+            status_txt = reliability_meta.get("status", "Low")
+            reason_txt = reliability_meta.get("reason", "model quality gate")
+            gate_meta = recs.get("reliability_gate", {}) if isinstance(recs, dict) else {}
+            gate_reasons = gate_meta.get("reasons", []) if isinstance(gate_meta, dict) else []
+            gate_thresholds = gate_meta.get("thresholds", {}) if isinstance(gate_meta, dict) else {}
+            gate_message = reliability_meta.get(
+                "gate_message",
+                "Forecast reliability gate is active.",
+            )
+            st.warning(
+                f"Low-confidence mode active: reliability={status_txt} ({reason_txt}). "
+                "Recommendations are intentionally conservative until model quality improves."
+            )
+            st.caption(gate_message)
+            if gate_reasons:
+                st.caption(f"Gate reasons: {', '.join(gate_reasons)}")
+            if gate_thresholds:
+                st.caption(
+                    "Gate thresholds: "
+                    f"min_r2={gate_thresholds.get('min_r2')} | "
+                    f"min_test_size={gate_thresholds.get('min_test_size')} | "
+                    f"require_beats_naive={gate_thresholds.get('require_beats_naive')}"
+                )
+
+        score_breakdown = recs.get("score_breakdown", {}) if isinstance(recs, dict) else {}
+        if isinstance(score_breakdown, dict) and score_breakdown:
+            with st.expander("Score Breakdown"):
+                raw_score = score_breakdown.get("raw_score")
+                final_score = score_breakdown.get("final_score")
+                method = score_breakdown.get("method", "")
+                if isinstance(raw_score, (int, float)):
+                    st.write(f"Method: {method}")
+                    st.write(f"Raw score: {raw_score:.2f}")
+                    st.write(f"Final score: {final_score}/10")
+
+                components = score_breakdown.get("components", {})
+                weights = score_breakdown.get("weights", {})
+                contributions = score_breakdown.get("contributions", {})
+                if isinstance(components, dict) and components:
+                    rows = []
+                    for key, val in components.items():
+                        rows.append(
+                            {
+                                "component": key,
+                                "value": val,
+                                "weight": weights.get(key),
+                                "contribution": contributions.get(key),
+                            }
+                        )
+                    st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+                cap_info = score_breakdown.get("cap_applied")
+                if isinstance(cap_info, dict) and cap_info:
+                    st.caption(
+                        f"Cap applied: {cap_info.get('type')} -> {cap_info.get('capped_to')} "
+                        f"({cap_info.get('reason')})"
+                    )
+
         st.divider()
 
         # ── Growth outlook + risk ──────────────────────────────────────────────
@@ -1749,13 +1809,14 @@ elif page == "🤖 AI Recommendations":
             target_rate = growth.get("target_growth_rate", "N/A")
             gap = growth.get("gap_vs_target", "N/A")
             gap_status = growth.get("gap_status", "")
+            period_type = str(growth.get("period_type", "period"))
             pred_rate_ann = growth.get("predicted_growth_rate_annualized")
             target_rate_ann = growth.get("target_growth_rate_annualized")
             gap_ann = growth.get("gap_vs_target_annualized")
             st.caption(
                 f"{conf_icon} Confidence: **{conf}** | "
-                f"Predicted: **{pred_rate}% / period** | "
-                f"Target: **{target_rate}% / period** | "
+                f"Predicted: **{pred_rate}% / {period_type}** | "
+                f"Target: **{target_rate}% / {period_type}** | "
                 f"Gap: **{gap}%** ({gap_status})"
             )
             if all(isinstance(v, (int, float)) for v in [pred_rate_ann, target_rate_ann, gap_ann]):
