@@ -78,22 +78,31 @@ def restore_session() -> bool:
             st.session_state["user_id"] = user.user.id
             st.session_state["user_email"] = user.user.email
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[AUTH] restore_session failed: {type(e).__name__}: {e}")
     return False
 
 
 def is_authenticated() -> bool:
     if "user" not in st.session_state:
         # Try to restore from Supabase
-        return restore_session()
+        restored = restore_session()
+        if not restored:
+            print(f"[AUTH] is_authenticated: no cached user, restore_session returned False")
+        return restored
     try:
         session = st.session_state.get("session")
         if session and hasattr(session, "refresh_token"):
-            refreshed = _get_client().auth.refresh_session(session.refresh_token)
-            st.session_state["session"] = refreshed.session
+            try:
+                refreshed = _get_client().auth.refresh_session(session.refresh_token)
+                st.session_state["session"] = refreshed.session
+            except Exception as e:
+                print(f"[AUTH] Session refresh failed: {type(e).__name__}: {e}")
+                logout()
+                return False
         return True
-    except Exception:
+    except Exception as e:
+        print(f"[AUTH] is_authenticated exception: {type(e).__name__}: {e}")
         logout()
         return False
 

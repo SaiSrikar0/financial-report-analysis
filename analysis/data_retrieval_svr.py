@@ -434,6 +434,30 @@ def load_and_validate_training_data(
             df["ticker"] = ticker
         else:
             df["ticker"] = df["ticker"].fillna(ticker)
+
+        # Coerce core types for upload-flow records (these may not include
+        # engineered fields yet because transform_dynamic is a separate step).
+        if "date" in df.columns:
+            df["date"] = _coerce_date_series(df["date"])
+
+        numeric_fields = [
+            "revenue",
+            "net_income",
+            "operating_income",
+            "total_assets",
+            "total_liabilities",
+            "operating_cashflow",
+        ]
+        for field in numeric_fields:
+            if field in df.columns:
+                df[field] = _coerce_numeric_series(df[field])
+
+        missing_engineered = [f for f in OPTIONAL_SVR_FIELDS if f not in df.columns]
+        if missing_engineered:
+            all_messages.append("ℹ️ Engineering SVR features from uploaded records")
+            df = _engineer_svr_features(df)
+
+        df = df.replace([np.inf, -np.inf], np.nan)
     else:
         # Otherwise retrieve from database
         all_messages.append("→ Retrieving from database...")

@@ -131,6 +131,7 @@ See detailed project docs in `docs/`:
 - `docs/USER_DATA_INTEGRATION.md`
 - `docs/DASHBOARD_FIX_INSTRUCTIONS.md`
 - `docs/PROTOTYPE_RELEASE_CHECKLIST.md`
+- `docs/PROJECT_COMPLETE_HANDOFF.md`
 
 ## Known Prototype Limitations
 

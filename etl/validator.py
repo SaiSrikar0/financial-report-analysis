@@ -26,6 +26,11 @@ MIN_RECORDS = 3  # Minimum years/periods needed for trend analysis
 MAX_NULL_PCT_FOR_ENGINEERED = 0.5  # Allow up to 50% NULL for growth features (first period has no growth)
 
 
+def _safe_ascii(text: str) -> str:
+    """Best-effort ASCII sanitization for Windows cp1252 terminals."""
+    return str(text).encode("ascii", errors="replace").decode("ascii")
+
+
 def validate(standard_records: List[Dict]) -> Tuple[bool, List[str]]:
     """
     Returns (is_valid, list_of_issues).
@@ -73,7 +78,7 @@ def validate(standard_records: List[Dict]) -> Tuple[bool, List[str]]:
     if duplicates:
         issues.append(
             f"WARNING: {len(duplicates)} duplicate (ticker, date) pairs detected. "
-            f"Records may have been doubled during LLM extraction."
+            "This is common in synthetic/random datasets; loader will keep one row per key during upsert."
         )
 
     # Check revenue values are plausible (not all zero)
@@ -89,15 +94,15 @@ def validate(standard_records: List[Dict]) -> Tuple[bool, List[str]]:
 
 def print_validation_report(is_valid: bool, issues: List[str]):
     if is_valid and not issues:
-        print("[Validator] ✅ Data passed validation. Proceeding to analysis pipeline.")
+        print("[Validator] [OK] Data passed validation. Proceeding to analysis pipeline.")
         return
     if is_valid:
-        print("[Validator] ✅ Passed with warnings:")
+        print("[Validator] [OK] Passed with warnings:")
     else:
-        print("[Validator] ❌ Validation failed:")
+        print("[Validator] [ERROR] Validation failed:")
     for issue in issues:
-        prefix = "  ❌" if issue.startswith("CRITICAL") else "  ⚠️ "
-        print(f"{prefix} {issue}")
+        prefix = "  [ERROR]" if issue.startswith("CRITICAL") else "  [WARN]"
+        print(_safe_ascii(f"{prefix} {issue}"))
 
 
 def validate_engineered_features(df: pd.DataFrame) -> Tuple[bool, List[str]]:
@@ -215,17 +220,17 @@ def validate_engineered_features(df: pd.DataFrame) -> Tuple[bool, List[str]]:
 def print_engineered_features_report(is_valid: bool, issues: List[str]):
     """Pretty-print validation results for engineered features."""
     if is_valid and not issues:
-        print("[Validator] ✅ Engineered features validated. Ready for SVR training.")
+        print("[Validator] [OK] Engineered features validated. Ready for SVR training.")
         return
     if is_valid:
-        print("[Validator] ✅ Features validated with notes:")
+        print("[Validator] [OK] Features validated with notes:")
     else:
-        print("[Validator] ❌ Feature validation failed:")
+        print("[Validator] [ERROR] Feature validation failed:")
     for issue in issues:
         if issue.startswith("CRITICAL"):
-            prefix = "  ❌"
+            prefix = "  [ERROR]"
         elif issue.startswith("ℹ️"):
-            prefix = "  ℹ️"
+            prefix = "  [INFO]"
         else:
-            prefix = "  ⚠️"
-        print(f"{prefix} {issue}")
+            prefix = "  [WARN]"
+        print(_safe_ascii(f"{prefix} {issue}"))
