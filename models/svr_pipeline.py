@@ -62,6 +62,10 @@ def build_supervised_dataset(df, target_col="net_income", horizon=1):
         if col not in feature_exclude
     ]
 
+    # Replace infinities before filtering; growth calculations can produce inf
+    # when previous period values are zero.
+    work_df = work_df.replace([np.inf, -np.inf], np.nan)
+
     model_df_raw = work_df.dropna(subset=[target_name]).copy()
     metadata = model_df_raw[["date", "ticker"]].copy()
     model_df = pd.get_dummies(model_df_raw, columns=["ticker"], drop_first=True)
@@ -71,8 +75,19 @@ def build_supervised_dataset(df, target_col="net_income", horizon=1):
 
     model_df = model_df.dropna(subset=feature_cols)
 
+    # Keep only finite training rows so downstream scikit-learn calls do not fail
+    # on "Input contains NaN, infinity or a value too large".
+    finite_mask = np.isfinite(model_df[feature_cols]).all(axis=1) & np.isfinite(model_df[target_name])
+    model_df = model_df.loc[finite_mask].copy()
+
     X = model_df[feature_cols].copy()
     y = model_df[target_name].copy()
+
+    if len(X) == 0:
+        raise ValueError(
+            "No finite supervised rows available after cleaning. "
+            "Check for zero-denominator growth values or non-numeric financial fields."
+        )
 
     last_rows = work_df.groupby("ticker", as_index=False).tail(1).copy()
     future_df = pd.get_dummies(last_rows, columns=["ticker"], drop_first=True)
@@ -85,6 +100,7 @@ def build_supervised_dataset(df, target_col="net_income", horizon=1):
             future_df[col] = 0
 
     future_X = future_df[feature_cols].copy()
+    future_X = future_X.replace([np.inf, -np.inf], np.nan).fillna(0)
 
     metadata = metadata.loc[model_df.index].copy()
 
@@ -212,6 +228,41 @@ def predict_future_and_gaps(model, future_rows, future_X, confidence_sigma, targ
     output["target_next_net_income"] = output["current_net_income"] * (1 + target_growth_rate / 100)
     
     return output
+
+
+def _infer_periods_per_year(dates: pd.Series) -> float:
+    """Infer data frequency as periods/year from median date spacing."""
+    d = pd.to_datetime(pd.Series(dates), errors="coerce").dropna().sort_values()
+    if len(d) < 2:
+        return 1.0
+
+    deltas = d.diff().dropna().dt.days
+    if deltas.empty:
+        return 1.0
+
+    median_days = float(deltas.median())
+    if median_days <= 2:
+        return 365.0
+    if median_days <= 8:
+        return 52.0
+    if median_days <= 16:
+        return 24.0
+    if median_days <= 45:
+        return 12.0
+    if median_days <= 120:
+        return 4.0
+    if median_days <= 240:
+        return 2.0
+    return 1.0
+
+
+def _annual_to_period_target(annual_target_pct: float, periods_per_year: float) -> float:
+    """Convert annual growth target percent to per-period percent."""
+    if periods_per_year <= 0:
+        return annual_target_pct
+    annual_decimal = annual_target_pct / 100.0
+    per_period_decimal = (1.0 + annual_decimal) ** (1.0 / periods_per_year) - 1.0
+    return per_period_decimal * 100.0
 
 
 def save_phase4_outputs(report_dir, summary, pred_df, future_df):
@@ -363,12 +414,15 @@ def run_phase4_svr(target_growth_rate=10.0, report_dir="analysis/reports"):
     pred_df = pred_df.reset_index(drop=True)
 
     print("\n[6/6] Future prediction and target gap analysis...")
+    periods_per_year = _infer_periods_per_year(dates)
+    period_target_growth = _annual_to_period_target(target_growth_rate, periods_per_year)
+
     future_df = predict_future_and_gaps(
         model=model,
         future_rows=data["future_rows"],
         future_X=data["future_X"],
         confidence_sigma=test_metrics["residual_std"],
-        target_growth_rate=target_growth_rate,
+        target_growth_rate=period_target_growth,
     )
     print(f"✓ Future predictions generated for {len(future_df)} companies")
 
@@ -471,6 +525,9 @@ def run_phase4_svr_for_ticker(
     X, y = data["X"], data["y"]
     dates = pd.to_datetime(data["model_df"]["date"], errors="coerce")
 
+    periods_per_year = _infer_periods_per_year(dates)
+    period_target_growth = _annual_to_period_target(target_growth_rate, periods_per_year)
+
     if len(X) < 2:
         # Not enough rows to fit SVR; produce a deterministic fallback from
         # observed growth so recommendations remain ticker-specific.
@@ -486,15 +543,15 @@ def run_phase4_svr_for_ticker(
 
         future_df["current_net_income"] = future_df["net_income"]
         future_df["predicted_growth_rate"] = observed_growth
-        future_df["target_growth_rate"] = target_growth_rate
-        future_df["gap_vs_target"] = observed_growth - target_growth_rate
+        future_df["target_growth_rate"] = period_target_growth
+        future_df["gap_vs_target"] = observed_growth - period_target_growth
         future_df["gap_status"] = np.where(
             future_df["gap_vs_target"] >= 0, "surplus", "shortfall"
         )
         future_df["confidence_lower_95"] = observed_growth - 1.96 * confidence_sigma
         future_df["confidence_upper_95"] = observed_growth + 1.96 * confidence_sigma
         future_df["predicted_next_net_income"] = future_df["current_net_income"] * (1 + observed_growth / 100)
-        future_df["target_next_net_income"] = future_df["current_net_income"] * (1 + target_growth_rate / 100)
+        future_df["target_next_net_income"] = future_df["current_net_income"] * (1 + period_target_growth / 100)
 
         os.makedirs(report_dir, exist_ok=True)
         future_path = os.path.join(report_dir, "svr_future_predictions.csv")
@@ -566,7 +623,7 @@ def run_phase4_svr_for_ticker(
         future_rows=data["future_rows"],
         future_X=data["future_X"],
         confidence_sigma=confidence_sigma,
-        target_growth_rate=target_growth_rate,
+        target_growth_rate=period_target_growth,
     )
 
     future_df = future_df[

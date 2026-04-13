@@ -729,6 +729,15 @@ with st.sidebar:
         label_visibility="collapsed",
     )
     st.session_state["nav_page"] = page
+
+    # Upload CTA/session payload should only live on the Upload page.
+    # Clearing it on navigation prevents stale UI artifacts on other pages.
+    if page != "📤 Upload Data":
+        st.session_state.pop("upload_ready_ticker", None)
+        st.session_state.pop("upload_ready_standard_records", None)
+        st.session_state.pop("upload_ready_category_records", None)
+        st.session_state.pop("upload_ready_row_count", None)
+
     st.divider()
 
     # Existing sidebar controls (only shown on Dashboard page)
@@ -1322,6 +1331,14 @@ if page == "📊 Dashboard":
 # PAGE: UPLOAD DATA
 # ═══════════════════════════════════════════════════════════════════════════════
 elif page == "📤 Upload Data":
+    def _clear_upload_ready_state() -> None:
+        st.session_state.pop("upload_ready_ticker", None)
+        st.session_state.pop("upload_ready_standard_records", None)
+        st.session_state.pop("upload_ready_category_records", None)
+        st.session_state.pop("upload_ready_row_count", None)
+        st.session_state.pop("upload_ready_filename", None)
+        st.session_state["upload_show_train_cta"] = False
+
     st.markdown(
         """
         <div class="brand-row">
@@ -1347,9 +1364,21 @@ elif page == "📤 Upload Data":
         label_visibility="visible",
     )
 
+    if "upload_show_train_cta" not in st.session_state:
+        st.session_state["upload_show_train_cta"] = False
+
+    # If user selects a different file, clear stale CTA/payload from prior uploads.
+    previous_ready_filename = st.session_state.get("upload_ready_filename")
+    if uploaded_file is not None and previous_ready_filename and uploaded_file.name != previous_ready_filename:
+        _clear_upload_ready_state()
+
     if uploaded_file:
         if st.button("Process & Load Data", type="primary", use_container_width=True):
-            from etl.file_processor import process_upload
+            from etl.file_processor import (
+                process_upload,
+                has_direct_standard_schema,
+                build_direct_standard_and_category_records,
+            )
             from etl.llm_extractor import run_extraction_pipeline
             from etl.transform import transform_dynamic
             from etl.load import store_uploaded_file, is_duplicate_uploaded_file
@@ -1418,18 +1447,26 @@ elif page == "📤 Upload Data":
                     status.update(label="Storage failed", state="error")
                     st.stop()
 
-                # Step 3: LLM schema normalisation
-                st.write("🤖 Running LLM schema normalisation (2-prompt pipeline)...")
+                # Step 3: Schema normalisation
                 try:
-                    standard_records, category_records = run_extraction_pipeline(
-                        raw_records, ticker=ticker_clean
-                    )
+                    if has_direct_standard_schema(raw_records):
+                        st.write("🧭 Structured schema detected. Using deterministic parser (LLM bypass).")
+                        standard_records, category_records = build_direct_standard_and_category_records(
+                            raw_records,
+                            ticker_fallback=ticker_clean,
+                        )
+                    else:
+                        st.write("🤖 Running LLM schema normalisation (2-prompt pipeline)...")
+                        standard_records, category_records = run_extraction_pipeline(
+                            raw_records, ticker=ticker_clean
+                        )
+
                     st.write(
                         f"✅ Normalised {len(standard_records)} records to standard schema."
                     )
                 except Exception as e:
-                    st.error(f"LLM extraction failed: {e}")
-                    status.update(label="LLM extraction failed", state="error")
+                    st.error(f"Schema normalization failed: {e}")
+                    status.update(label="Schema normalization failed", state="error")
                     st.stop()
 
                 # Step 4: Validate
@@ -1496,13 +1533,21 @@ elif page == "📤 Upload Data":
             st.session_state["upload_ready_standard_records"] = standard_records
             st.session_state["upload_ready_category_records"] = category_records
             st.session_state["upload_ready_row_count"] = len(tables["standard_table"])
+            st.session_state["upload_ready_filename"] = uploaded_file.name
+            st.session_state["upload_show_train_cta"] = True
 
     upload_ready_ticker = st.session_state.get("upload_ready_ticker")
     upload_ready_standard_records = st.session_state.get("upload_ready_standard_records")
     upload_ready_category_records = st.session_state.get("upload_ready_category_records")
     upload_ready_row_count = st.session_state.get("upload_ready_row_count")
+    upload_show_train_cta = st.session_state.get("upload_show_train_cta", False)
 
-    if upload_ready_ticker and upload_ready_standard_records is not None and upload_ready_category_records is not None:
+    if (
+        upload_show_train_cta
+        and upload_ready_ticker
+        and upload_ready_standard_records is not None
+        and upload_ready_category_records is not None
+    ):
         st.markdown("\n---\n")
         st.success(
             f"✅ **{upload_ready_ticker}** data has been collected and is ready for the model to train. "
@@ -1526,10 +1571,7 @@ elif page == "📤 Upload Data":
                 auto_generate_recommendations=True,
             )
             if success:
-                st.session_state.pop("upload_ready_ticker", None)
-                st.session_state.pop("upload_ready_standard_records", None)
-                st.session_state.pop("upload_ready_category_records", None)
-                st.session_state.pop("upload_ready_row_count", None)
+                _clear_upload_ready_state()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1704,13 +1746,24 @@ elif page == "🤖 AI Recommendations":
                 "🟢" if conf == "High" else "🟡" if conf == "Medium" else "🔴"
             )
             pred_rate = growth.get("predicted_growth_rate", "N/A")
+            target_rate = growth.get("target_growth_rate", "N/A")
             gap = growth.get("gap_vs_target", "N/A")
             gap_status = growth.get("gap_status", "")
+            pred_rate_ann = growth.get("predicted_growth_rate_annualized")
+            target_rate_ann = growth.get("target_growth_rate_annualized")
+            gap_ann = growth.get("gap_vs_target_annualized")
             st.caption(
                 f"{conf_icon} Confidence: **{conf}** | "
-                f"Predicted: **{pred_rate}%** | "
-                f"Gap vs target: **{gap}%** ({gap_status})"
+                f"Predicted: **{pred_rate}% / period** | "
+                f"Target: **{target_rate}% / period** | "
+                f"Gap: **{gap}%** ({gap_status})"
             )
+            if all(isinstance(v, (int, float)) for v in [pred_rate_ann, target_rate_ann, gap_ann]):
+                st.caption(
+                    f"Annualized view: Predicted **{pred_rate_ann:.2f}%** | "
+                    f"Target **{target_rate_ann:.2f}%** | "
+                    f"Gap **{gap_ann:.2f}%**"
+                )
             if growth.get("key_drivers"):
                 st.write("**Key Drivers:**")
                 for d in growth["key_drivers"]:

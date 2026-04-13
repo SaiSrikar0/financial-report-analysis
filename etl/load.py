@@ -264,6 +264,9 @@ def load_user_data(
         
         # CRITICAL: Ensure ticker is not NULL (required for SVR training)
         if "ticker" in d.columns:
+            # Normalize ticker values so conflict-key dedupe is consistent.
+            d["ticker"] = d["ticker"].astype(str).str.strip().str.upper()
+            d["ticker"] = d["ticker"].replace({"": None, "NAN": None, "NONE": None})
             if d["ticker"].isna().any():
                 print(f"[load_user_data] ⚠️ WARNING: Found {d['ticker'].isna().sum()} rows with NULL ticker!")
             if d["ticker"].isna().all():
@@ -282,6 +285,21 @@ def load_user_data(
         
         # Replace inf with nan first
         d = d.replace([np.inf, -np.inf], np.nan)
+
+        # De-duplicate by the same conflict key used in Supabase upsert.
+        # Without this, PostgreSQL raises:
+        # "ON CONFLICT DO UPDATE command cannot affect row a second time"
+        # when a single insert payload contains repeated (ticker, date, user_id).
+        conflict_cols = ["ticker", "date", "user_id"]
+        if all(col in d.columns for col in conflict_cols):
+            before_dedupe = len(d)
+            d = d.drop_duplicates(subset=conflict_cols, keep="last").copy()
+            dropped = before_dedupe - len(d)
+            if dropped > 0:
+                print(
+                    f"[load_user_data] ⚠️ Deduplicated {dropped} rows "
+                    f"on conflict key ({', '.join(conflict_cols)})."
+                )
         
         # Convert all NaN/None to None (Python None, not numpy.nan)
         d = d.where(pd.notnull(d), other=None)
