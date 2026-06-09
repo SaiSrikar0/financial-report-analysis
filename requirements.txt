@@ -1,45 +1,45 @@
-# Core Dependencies
-python-dotenv==1.0.0
+# Environment variables
+python-dotenv>=1.0.0
 
 # Database
 supabase>=2.5.0
 
-# Data Processing & Analysis
-pandas
-numpy
+# Data processing and analysis
+pandas>=2.2.0
+numpy>=1.26.0
 
-# Machine Learning (compatible with NumPy 2.x)
-scikit-learn>=1.4
+# Machine learning
+scikit-learn>=1.4.0
 
-# Visualization
-matplotlib==3.8.2
-seaborn==0.13.1
-plotly==5.17.0
+# Data visualization
+matplotlib>=3.10.0
+seaborn>=0.13.2
+plotly>=5.17.0
 
-# Frontend
-streamlit==1.28.1
+# Streamlit frontend
+streamlit>=1.45.0
 
-# API & HTTP
-requests==2.31.0
-httpx>=0.26,<0.28
+# API and HTTP requests
+requests>=2.31.0
+httpx>=0.26,<0.29
 
-# Utilities
-python-dateutil==2.8.2
-pytz==2023.3
+# Date and time utilities
+python-dateutil>=2.8.2
+pytz>=2023.3
 
-# Explainability
-shap==0.45.1
+# Model explainability
+shap>=0.48.0
 
-# LLM / AI Integration
+# LLM integration
 groq>=0.4.1
 
-# File Processing
-pdfplumber>=0.10.3
+# File processing
+pdfplumber>=0.11.9
 openpyxl>=3.1.2
 xlrd>=2.0.1
 
-# Config / YAML
+# YAML configuration support
 pyyaml>=6.0.1
 
-# Realtime transport compatibility (supabase/realtime)
+# WebSocket support for Supabase realtime
 websockets>=11,<16
