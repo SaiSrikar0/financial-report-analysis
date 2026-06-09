@@ -1,32 +1,26 @@
 """Supabase Auth module for FinCast portal."""
 
-import os
 import streamlit as st
 from supabase import create_client
-from dotenv import load_dotenv
 
-load_dotenv()
+from config import get_secret
 
 
 def _get_client():
-    """Create a fresh Supabase client, optionally with authenticated session."""
-    url = os.getenv("SUPABASE_URL") or os.getenv("supabase_url")
-    key = os.getenv("SUPABASE_KEY") or os.getenv("supabase_key")
+    """Create a fresh Supabase client."""
+
+    url = get_secret("SUPABASE_URL")
+    key = get_secret("SUPABASE_KEY")
+
     if not url or not key:
-        raise ValueError("Missing SUPABASE_URL/SUPABASE_KEY in .env")
-    
-    client = create_client(url, key)
-    
-    # If user is authenticated, set their session on the client
-    # This ensures RLS policies use auth.uid() correctly for subsequent requests
-    try:
-        if "session" in st.session_state and st.session_state["session"]:
-            session = st.session_state["session"]
-            client.auth.set_session(session.access_token, session.refresh_token)
-    except Exception:
-        pass
-    
-    return client
+        print(f"[AUTH DEBUG] URL found: {bool(url)}")
+        print(f"[AUTH DEBUG] KEY found: {bool(key)}")
+
+        raise ValueError(
+            "SUPABASE_URL and SUPABASE_KEY are not configured"
+        )
+
+    return create_client(url, key)
 
 
 def login(email: str, password: str) -> bool:

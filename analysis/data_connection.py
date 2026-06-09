@@ -3,45 +3,59 @@
 
 import os
 import pandas as pd
-from supabase import create_client, Client
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from supabase import create_client
+from config import get_secret
 
 def _is_truthy(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
-
 def get_supabase_client():
     """Initialize and return Supabase client"""
-    url = os.getenv("SUPABASE_URL") or os.getenv("supabase_url")
-    anon_key = os.getenv("SUPABASE_KEY") or os.getenv("supabase_key")
-    service_role_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
-    use_service_role = _is_truthy(os.getenv("SUPABASE_USE_SERVICE_ROLE", "0"))
+
+    url = get_secret("SUPABASE_URL")
+
+    anon_key = get_secret("SUPABASE_KEY")
+
+    service_role_key = get_secret(
+        "SUPABASE_SERVICE_ROLE_KEY"
+    )
+
+    use_service_role = _is_truthy(
+        get_secret(
+            "SUPABASE_USE_SERVICE_ROLE",
+            "0"
+        )
+    )
 
     key = anon_key
+
     if use_service_role and service_role_key:
         key = service_role_key
 
     if not url or not key:
         raise ValueError(
-            "Missing SUPABASE_URL/SUPABASE_KEY (or supabase_url/supabase_key) in .env"
+            "SUPABASE_URL and SUPABASE_KEY are not configured"
         )
-    
+
     client = create_client(url, key)
-    
-    # Import here to avoid circular imports
+
     try:
         import streamlit as st
-        # If user is authenticated (logged in), set their session on the client
-        # This ensures RLS policies use auth.uid() correctly
-        if "session" in st.session_state and st.session_state["session"]:
+
+        if (
+            "session" in st.session_state
+            and st.session_state["session"]
+        ):
             session = st.session_state["session"]
-            client.auth.set_session(session.access_token, session.refresh_token)
+
+            client.auth.set_session(
+                session.access_token,
+                session.refresh_token
+            )
+
     except Exception:
         pass
-    
+
     return client
 
 

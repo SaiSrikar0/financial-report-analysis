@@ -8,20 +8,28 @@ into data/raw without modifying the ETL pipeline.
 import os
 import json
 import requests
-from dotenv import load_dotenv
+import streamlit as st
 from datetime import datetime
 
 
-# -----------------------------
-# Load environment variables
-# -----------------------------
-load_dotenv()
+def get_secret(key, default=None):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return os.getenv(key, default)
 
-API_KEY = os.getenv("ALPHAVANTAGE_API_KEY")
-BASE_URL = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co/query")
+
+API_KEY = get_secret("ALPHAVANTAGE_API_KEY")
+
+BASE_URL = get_secret(
+    "ALPHAVANTAGE_BASE_URL",
+    "https://www.alphavantage.co/query"
+)
 
 if not API_KEY:
-    raise ValueError("Missing ALPHAVANTAGE_API_KEY in .env")
+    raise ValueError(
+        "ALPHAVANTAGE_API_KEY is not configured"
+    )
 
 
 # -----------------------------

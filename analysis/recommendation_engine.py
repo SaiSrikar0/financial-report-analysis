@@ -12,12 +12,19 @@ from typing import Any, Dict
 
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
 from groq import Groq
+from config import get_secret
 
-load_dotenv()
+GROQ_API_KEY = get_secret("GROQ_API_KEY")
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+if not GROQ_API_KEY:
+    raise ValueError(
+        "GROQ_API_KEY is not configured"
+    )
+
+client = Groq(
+    api_key=GROQ_API_KEY
+)
 MODEL = "llama-3.3-70b-versatile"  # change here only if needed
 
 RELIABILITY_GATE_THRESHOLDS = {

@@ -10,13 +10,29 @@ import json
 import re
 from typing import List, Dict, Any, Tuple
 
+import streamlit as st
 from groq import Groq
-from dotenv import load_dotenv
 
-load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-MODEL = "llama-3.3-70b-versatile"  # change here only if needed
+def get_secret(key, default=None):
+    try:
+        return st.secrets[key]
+    except Exception:
+        return os.getenv(key, default)
+
+
+GROQ_API_KEY = get_secret("GROQ_API_KEY")
+
+if not GROQ_API_KEY:
+    raise ValueError(
+        "GROQ_API_KEY is not configured"
+    )
+
+client = Groq(
+    api_key=GROQ_API_KEY
+)
+
+MODEL = "llama-3.3-70b-versatile"
 
 
 def call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.2) -> str:

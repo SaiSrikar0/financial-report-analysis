@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """Setup tables in new Supabase project."""
-
-import os
 from pathlib import Path
-from dotenv import load_dotenv
 from supabase import create_client
+from config import get_secret
 
-load_dotenv()
+url = get_secret("SUPABASE_URL")
 
-url = os.getenv("SUPABASE_URL")
-service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+service_key = get_secret(
+    "SUPABASE_SERVICE_ROLE_KEY"
+)
 
 if not url or not service_key:
-    print("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env")
+    print(
+        "❌ SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured"
+    )
     exit(1)
 
 # Read the SQL schema

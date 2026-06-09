@@ -8,9 +8,10 @@ import importlib
 import sys
 from pathlib import Path
 
+from config import get_secret
+
 
 REQUIRED_EXTERNAL_IMPORTS = [
-    "dotenv",
     "groq",
     "numpy",
     "pandas",
@@ -60,23 +61,8 @@ def try_import(module_name: str) -> tuple[bool, str]:
     try:
         importlib.import_module(module_name)
         return True, "ok"
-    except Exception as exc:  # pragma: no cover - smoke-test fallback
+    except Exception as exc:
         return False, str(exc)
-
-
-def load_env_from_dotenv(root: Path) -> dict[str, str]:
-    env_map: dict[str, str] = {}
-    dotenv_path = root / ".env"
-    if not dotenv_path.exists():
-        return env_map
-
-    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
-        line = raw_line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        env_map[key.strip()] = value.strip().strip('"').strip("'")
-    return env_map
 
 
 def run_smoke_test(strict_env: bool, strict_artifacts: bool) -> int:
@@ -92,59 +78,102 @@ def run_smoke_test(strict_env: bool, strict_artifacts: bool) -> int:
     print("\n[1/4] Checking external dependencies...")
     for module in REQUIRED_EXTERNAL_IMPORTS:
         ok, detail = try_import(module)
+
         if ok:
             print(f"  [PASS] import {module}")
         else:
             print(f"  [FAIL] import {module}: {detail}")
-            failures.append(f"Missing/broken external module: {module}")
+            failures.append(
+                f"Missing/broken external module: {module}"
+            )
 
     print("\n[2/4] Checking project module imports...")
     for module in REQUIRED_PROJECT_IMPORTS:
         ok, detail = try_import(module)
+
         if ok:
             print(f"  [PASS] import {module}")
         else:
             print(f"  [FAIL] import {module}: {detail}")
-            failures.append(f"Broken project import: {module}")
+            failures.append(
+                f"Broken project import: {module}"
+            )
 
     print("\n[3/4] Checking required folder structure...")
     for rel_path in REQUIRED_DIRS:
         path = root / rel_path
+
         if path.exists() and path.is_dir():
             print(f"  [PASS] dir {rel_path}")
         else:
             print(f"  [FAIL] missing dir {rel_path}")
-            failures.append(f"Missing directory: {rel_path}")
+            failures.append(
+                f"Missing directory: {rel_path}"
+            )
 
-    print("\n[4/4] Checking env keys and generated artifacts...")
-    env_map = load_env_from_dotenv(root)
-    missing_env = [k for k in REQUIRED_ENV_KEYS if not env_map.get(k)]
+    print(
+        "\n[4/4] Checking configuration keys and generated artifacts..."
+    )
+
+    missing_env = [
+        key
+        for key in REQUIRED_ENV_KEYS
+        if not get_secret(key)
+    ]
+
     if missing_env:
         level = "FAIL" if strict_env else "WARN"
-        print(f"  [{level}] missing env keys in .env: {', '.join(missing_env)}")
+
+        print(
+            f"  [{level}] missing configuration keys: "
+            f"{', '.join(missing_env)}"
+        )
+
         if strict_env:
-            failures.append("Missing required .env keys")
+            failures.append(
+                "Missing required configuration keys"
+            )
     else:
-        print("  [PASS] required env keys present in .env")
+        print(
+            "  [PASS] required configuration keys available"
+        )
 
     present_count = 0
+
     for rel_path in EXPECTED_ARTIFACTS:
         if (root / rel_path).exists():
             present_count += 1
 
     if present_count == len(EXPECTED_ARTIFACTS):
-        print(f"  [PASS] artifacts present: {present_count}/{len(EXPECTED_ARTIFACTS)}")
+        print(
+            f"  [PASS] artifacts present: "
+            f"{present_count}/{len(EXPECTED_ARTIFACTS)}"
+        )
     else:
-        level = "FAIL" if strict_artifacts else "WARN"
-        print(f"  [{level}] artifacts present: {present_count}/{len(EXPECTED_ARTIFACTS)}")
+        level = (
+            "FAIL"
+            if strict_artifacts
+            else "WARN"
+        )
+
+        print(
+            f"  [{level}] artifacts present: "
+            f"{present_count}/{len(EXPECTED_ARTIFACTS)}"
+        )
+
         if strict_artifacts:
-            failures.append("Missing expected report artifacts")
+            failures.append(
+                "Missing expected report artifacts"
+            )
 
     print("\n" + "-" * 68)
+
     if failures:
         print("SMOKE TEST RESULT: FAILED")
+
         for item in failures:
             print(f"  - {item}")
+
         return 1
 
     print("SMOKE TEST RESULT: PASSED")
@@ -152,20 +181,36 @@ def run_smoke_test(strict_env: bool, strict_artifacts: bool) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run FinCast smoke tests")
+    parser = argparse.ArgumentParser(
+        description="Run FinCast smoke tests"
+    )
+
     parser.add_argument(
         "--strict-env",
         action="store_true",
-        help="Fail if required .env keys are missing.",
+        help=(
+            "Fail if required configuration "
+            "keys are missing."
+        ),
     )
+
     parser.add_argument(
         "--strict-artifacts",
         action="store_true",
-        help="Fail if expected report artifacts are missing.",
+        help=(
+            "Fail if expected report "
+            "artifacts are missing."
+        ),
     )
+
     args = parser.parse_args()
 
-    raise SystemExit(run_smoke_test(args.strict_env, args.strict_artifacts))
+    raise SystemExit(
+        run_smoke_test(
+            args.strict_env,
+            args.strict_artifacts,
+        )
+    )
 
 
 if __name__ == "__main__":

@@ -6,20 +6,22 @@ import json
 
 import numpy as np
 import pandas as pd
-from dotenv import load_dotenv
 from supabase import create_client
+
+from config import get_secret
 
 BATCH_SIZE = 100
 
 
 def get_supabase_client():
-    load_dotenv()
-    url = os.getenv("SUPABASE_URL") or os.getenv("supabase_url")
-    key = os.getenv("SUPABASE_KEY") or os.getenv("supabase_key")
+    url = get_secret("SUPABASE_URL")
+    key = get_secret("SUPABASE_KEY")
+
     if not url or not key:
         raise ValueError(
-            "Missing SUPABASE_URL/SUPABASE_KEY (or supabase_url/supabase_key) in .env"
+            "SUPABASE_URL and SUPABASE_KEY are not configured"
         )
+
     return create_client(url, key)
 
 
@@ -28,15 +30,21 @@ def get_supabase_admin_client():
     Returns Supabase client with service role key for backend operations.
     Bypasses RLS, allowing inserts with specific user_id values.
     """
-    load_dotenv()
-    url = os.getenv("SUPABASE_URL") or os.getenv("supabase_url")
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    url = get_secret("SUPABASE_URL")
+
+    service_key = get_secret(
+        "SUPABASE_SERVICE_ROLE_KEY"
+    )
+
     if not url or not service_key:
         raise ValueError(
-            "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env. "
-            "Get service role key from Supabase → Settings → API → Service role"
+            "SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not configured"
         )
-    return create_client(url, service_key)
+
+    return create_client(
+        url,
+        service_key
+    )
 
 
 def _df_to_records(df: pd.DataFrame) -> list[dict]:
